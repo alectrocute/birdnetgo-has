@@ -99,6 +99,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(hero["type"], "picture-entity")
         self.assertEqual(hero["entity"], "sensor.latest")
         self.assertEqual(hero["camera_image"], "camera.latest_image")
+        self.assertGreaterEqual(hero["grid_options"]["rows"], 5)
         tiles = [card for card in sections[0]["cards"] if card["type"] == "tile"]
         self.assertEqual([card["entity"] for card in tiles], [
             "sensor.daily", "sensor.detections", "sensor.latest", "sensor.interest",
@@ -107,7 +108,7 @@ class DashboardTests(unittest.TestCase):
         trend = sections[1]["cards"][0]
         self.assertEqual(trend["type"], "statistics-graph")
         self.assertEqual(trend["entities"][0]["entity"], "sensor.detections")
-        self.assertEqual(trend["stat_types"], ["change"])
+        self.assertEqual(trend["stat_types"], ["max"])
         for section in sections[2:]:
             self.assertEqual(section["cards"][0]["grid_options"]["columns"], 12)
 

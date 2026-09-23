@@ -193,9 +193,9 @@ class BirdNETGoDetectionsTodaySensor(BirdNETGoEntity):
     _attr_icon = "mdi:counter"
     _id_suffix = "detections_today"
     _attr_native_unit_of_measurement = "detections"
-    # total_increasing (not measurement) so the recorder computes the `sum`
-    # statistic; the dashboard's statistics-graph needs it for its `change`
-    # stat to chart detections per day.
+    # total_increasing is the correct class for a counter that resets at
+    # midnight; the dashboard's statistics-graph charts its daily max, where
+    # each day's peak equals that day's detection total.
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
 
     @property

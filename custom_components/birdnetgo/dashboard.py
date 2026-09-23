@@ -236,7 +236,7 @@ def _default_config(
                                 "camera_view": "auto",
                                 "show_name": True,
                                 "show_state": True,
-                                "grid_options": {"columns": 12, "rows": 3},
+                                "grid_options": {"columns": 12, "rows": 5},
                             },
                             {
                                 "type": "markdown",
@@ -268,7 +268,12 @@ def _default_config(
                                 "entities": [
                                     {"entity": detections_entity, "name": "Detections"}
                                 ],
-                                "stat_types": ["change"],
+                                # The sensor resets at midnight and grows during
+                                # the day, so each day's max equals that day's
+                                # detection total. Unlike `change`, max has data
+                                # from the first statistics bucket, so the card
+                                # is never blank on a fresh install.
+                                "stat_types": ["max"],
                                 "period": "day",
                                 "chart_type": "bar",
                                 "days_to_show": 30,
