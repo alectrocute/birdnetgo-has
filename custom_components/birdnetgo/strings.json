@@ -1,0 +1,102 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to BirdNET-Go",
+        "description": "Connect your analyzer to Home Assistant. BirdNET-Go nightly-20250427 or newer is required.",
+        "data": {
+          "host": "Host or address",
+          "port": "Port",
+          "ssl": "Use HTTPS",
+          "frontend_url": "Browser-facing frontend URL (optional)",
+          "scan_interval": "Update interval"
+        },
+        "data_description": {
+          "host": "For example, 192.168.1.50 or birdnet-go.local",
+          "frontend_url": "Useful when Home Assistant and browsers reach BirdNET-Go through different addresses",
+          "scan_interval": "How often Home Assistant checks for new detections"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Home Assistant could not reach the BirdNET-Go analytics API. Check the host, port, and HTTPS setting."
+    },
+    "abort": {
+      "already_configured": "This BirdNET-Go instance is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BirdNET-Go settings",
+        "description": "Choose a section to edit. Changes are saved when you choose Save changes.",
+        "menu_options": {
+          "connection": "Connection & updates",
+          "interests": "Birds of interest",
+          "notifications": "Notifications",
+          "dashboard": "Dashboard",
+          "save": "Save changes"
+        },
+        "menu_option_descriptions": {
+          "connection": "Refresh timing and the browser-facing BirdNET-Go address",
+          "interests": "Choose the species you want to follow",
+          "notifications": "Choose which detection events should send alerts",
+          "dashboard": "Restore the polished default Birds layout",
+          "save": "Apply all settings and close this dialog"
+        }
+      },
+      "connection": {
+        "title": "Connection & updates",
+        "description": "Tune how Home Assistant talks to this BirdNET-Go instance.",
+        "data": {
+          "scan_interval": "Update interval",
+          "frontend_url": "Browser-facing frontend URL"
+        },
+        "data_description": {
+          "scan_interval": "How often the analytics API is checked, in seconds",
+          "frontend_url": "Optional address used for links and browser lookups"
+        }
+      },
+      "interests": {
+        "title": "Birds of interest",
+        "description": "Enter one common name per line, or separate names with commas. Matching is case-insensitive.",
+        "data": {
+          "birds_of_interest": "Species to follow"
+        },
+        "data_description": {
+          "birds_of_interest": "For example: Baltimore Oriole, Blue Jay, Northern Cardinal"
+        }
+      },
+      "notifications": {
+        "title": "Notifications",
+        "description": "Alerts are optional and work without helpers or automations.",
+        "data": {
+          "notify_service": "Send through",
+          "notify_detections": "New detections",
+          "notify_first_time": "First-time species",
+          "notify_rare": "Rare returns",
+          "cooldown_minutes": "Detection cooldown",
+          "rare_threshold_days": "Rare after"
+        },
+        "data_description": {
+          "notify_service": "Choose a Home Assistant notify service",
+          "notify_detections": "Alert when a species is heard again",
+          "notify_first_time": "Alert when a species appears in the lifetime summary for the first time",
+          "notify_rare": "Alert when a familiar species returns after a long absence",
+          "cooldown_minutes": "Minimum time between detection alerts, in minutes",
+          "rare_threshold_days": "Number of quiet days that makes a return rare"
+        }
+      },
+      "dashboard": {
+        "title": "Birds dashboard",
+        "description": "The dashboard is a normal editable Home Assistant dashboard.",
+        "data": {
+          "reset_dashboard": "Restore the default layout"
+        },
+        "data_description": {
+          "reset_dashboard": "Replaces the Birds dashboard with the latest polished layout"
+        }
+      }
+    }
+  }
+}

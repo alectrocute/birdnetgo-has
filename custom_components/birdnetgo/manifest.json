@@ -1,0 +1,13 @@
+{
+  "domain": "birdnetgo",
+  "name": "BirdNET-Go",
+  "codeowners": ["@alectrocute"],
+  "config_flow": true,
+  "documentation": "https://github.com/alectrocute/birdnetgo-has",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/alectrocute/birdnetgo-has/issues",
+  "requirements": [],
+  "single_config_entry": false,
+  "version": "2.2.0"
+}
