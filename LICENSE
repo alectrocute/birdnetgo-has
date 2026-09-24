@@ -2,10 +2,6 @@ MIT License
 
 Copyright (c) 2026 BirdNET-Go Home Assistant integration contributors
 
-Sensors, cards, automations, and scripts are adapted from
-"Backyard Bird Tracking With AI-Powered BirdNET-Go" by Kyle Niewiada
-(https://www.kyleniewiada.org/blog/2025/05/backyard-bird-tracking-with-ai).
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
