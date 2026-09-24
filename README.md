@@ -1,6 +1,6 @@
 # BirdNET-Go for Home Assistant
 
-[![Validate](https://github.com/alectrocute/birdnetgo-has/actions/workflows/validate.yml/badge.svg)](https://github.com/alectrocute/birdnetgo-has/actions/workflows/validate.yml)
+[![Validate](https://github.com/alectrocute/birdnetgo-has/actions/workflows/validate.yml/badge.svg)](https://github.com/alectrocute/birdnetgo-has/actions/workflows/validate.yml) 
 
 Home Assistant integration for [BirdNET-Go](https://github.com/tphakala/birdnet-go). It reads the analytics API and adds sensors, an editable Birds dashboard, and optional notifications. Requires BirdNET-Go nightly-20250427 or newer.
 
