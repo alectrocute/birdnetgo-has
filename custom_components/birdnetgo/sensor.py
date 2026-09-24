@@ -367,9 +367,22 @@ class BirdNETGoFirstBirdTodaySensor(BirdNETGoEntity):
         for bird in self._species_list("daily_species"):
             if not isinstance(bird, dict) or not bird.get("common_name"):
                 continue
-            parsed = dt_util.parse_datetime(str(bird.get("first_heard") or ""))
-            if parsed is None:
-                continue
+            raw = str(bird.get("first_heard") or "")
+            parsed = dt_util.parse_datetime(raw)
+            if parsed is not None:
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+            else:
+                # Daily rows report a clock time like 04:35:00, not a date.
+                time_only = dt_util.parse_time(raw)
+                if time_only is None:
+                    continue
+                parsed = datetime.combine(
+                    dt_util.start_of_local_day(),
+                    time_only,
+                    tzinfo=dt_util.DEFAULT_TIME_ZONE,
+                )
+            parsed = dt_util.as_local(parsed)
             if first_time is None or parsed < first_time:
                 first, first_time = bird, parsed
         return first

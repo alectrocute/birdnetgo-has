@@ -158,24 +158,26 @@ Migration insights need a newer BirdNET-Go with the enhanced database.
 {% if arrivals | count == 0 and quiet | count == 0 -%}
 No notable arrivals or departures lately.
 {% else -%}
+**New arrivals · {{ arrivals | count }}**
+
 {% if arrivals | count > 0 -%}
 {% for bird in arrivals[:3] -%}
 - {{ bird }}
 {% endfor %}
 {% if arrivals | count > 3 -%}
-_+{{ arrivals | count - 3 }} more arrivals_
+_+{{ arrivals | count - 3 }} more_
 {% endif -%}
 {% else -%}
-No new arrivals recently.
+None recently.
 {% endif %}
 **Gone quiet · {{ quiet | count }}**
 
 {% if quiet | count > 0 -%}
-{% for bird in quiet[:2] -%}
+{% for bird in quiet[:3] -%}
 - {{ bird.get('common_name') or 'Unknown' }} · {{ bird.get('days_since') or '?' }} days
 {% endfor %}
-{% if quiet | count > 2 -%}
-_+{{ quiet | count - 2 }} more_
+{% if quiet | count > 3 -%}
+_+{{ quiet | count - 3 }} more_
 {% endif -%}
 {% else -%}
 None recently.
@@ -286,7 +288,7 @@ def _default_config(
                                 "Species all time",
                                 "mdi:bird",
                             ),
-                            _tile(latest_bird_entity, "Latest bird", "mdi:bird"),
+                            _tile(latest_bird_entity, "Latest bird", "mdi:binoculars"),
                             _tile(
                                 interest_entity,
                                 "Birds of interest",
@@ -304,13 +306,25 @@ def _default_config(
                     {
                         "type": "grid",
                         "title": "Trends",
-                        "column_span": 1,
+                        "column_span": 2,
                         "cards": [
-                            _tile(history_entity, "Yesterday", "mdi:chart-bar"),
+                            _tile(
+                                history_entity,
+                                "Yesterday",
+                                "mdi:chart-bar",
+                                columns=4,
+                            ),
                             _tile(
                                 migration_entity,
                                 "New arrivals",
-                                "mdi:bird",
+                                "mdi:trending-up",
+                                columns=4,
+                            ),
+                            _tile(
+                                foy_entity,
+                                "First of year",
+                                "mdi:calendar-star",
+                                columns=4,
                             ),
                             {
                                 "type": "markdown",
@@ -322,21 +336,8 @@ def _default_config(
                                 "type": "markdown",
                                 "entity": migration_entity,
                                 "content": migration,
-                                "grid_options": {"columns": 12},
+                                "grid_options": {"columns": 6},
                             },
-                        ],
-                    },
-                    {
-                        "type": "grid",
-                        "title": "First of year",
-                        "column_span": 1,
-                        "cards": [
-                            _tile(
-                                foy_entity,
-                                "First of year",
-                                "mdi:calendar-star",
-                                columns=12,
-                            ),
                             {
                                 "type": "conditional",
                                 "conditions": [
@@ -355,7 +356,7 @@ def _default_config(
                                     "entity": daily_entity,
                                     "content": foy,
                                 },
-                                "grid_options": {"columns": 12},
+                                "grid_options": {"columns": 6},
                             },
                         ],
                     },

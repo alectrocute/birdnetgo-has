@@ -8,8 +8,9 @@ from typing import Any
 
 from jinja2 import Environment, StrictUndefined
 
-
-SOURCE = Path(__file__).resolve().parents[1] / "custom_components/birdnetgo/dashboard.py"
+SOURCE = (
+    Path(__file__).resolve().parents[1] / "custom_components/birdnetgo/dashboard.py"
+)
 module = ast.parse(SOURCE.read_text())
 templates = {
     target.id: ast.literal_eval(node.value)
@@ -34,7 +35,10 @@ namespace = {
     "DASHBOARD_ICON": "mdi:bird",
     "FIRST_OF_YEAR_EMPTY_STATE": "None today",
 }
-exec(compile(functions, str(SOURCE), "exec"), namespace)
+exec(  # noqa: S102
+    compile(functions, str(SOURCE), "exec"),
+    namespace,
+)
 
 
 class DashboardTests(unittest.TestCase):
@@ -75,13 +79,29 @@ class DashboardTests(unittest.TestCase):
         )
 
     def test_tables_have_adjacent_rows(self):
-        for name in ("DAILY_TEMPLATE", "LATEST_TEMPLATE", "BRAND_NEW_TEMPLATE", "INTEREST_TEMPLATE"):
+        for name in (
+            "DAILY_TEMPLATE",
+            "LATEST_TEMPLATE",
+            "BRAND_NEW_TEMPLATE",
+            "INTEREST_TEMPLATE",
+        ):
             with self.subTest(template=name):
                 output = self.render(templates[name], self.birds)
                 lines = output.splitlines()
-                separator = next(i for i, line in enumerate(lines) if line.startswith("| :--"))
-                self.assertTrue(any("Blue Jay" in line for line in lines[separator + 1 : separator + 3]))
-                self.assertTrue(any("Robin" in line for line in lines[separator + 1 : separator + 3]))
+                separator = next(
+                    i for i, line in enumerate(lines) if line.startswith("| :--")
+                )
+                self.assertTrue(
+                    any(
+                        "Blue Jay" in line
+                        for line in lines[separator + 1 : separator + 3]
+                    )
+                )
+                self.assertTrue(
+                    any(
+                        "Robin" in line for line in lines[separator + 1 : separator + 3]
+                    )
+                )
                 self.assertNotIn("\n\n", "\n".join(lines[separator : separator + 3]))
                 if name == "DAILY_TEMPLATE":
                     self.assertIn("\n\n**5 detections**", output)
@@ -102,6 +122,16 @@ class DashboardTests(unittest.TestCase):
             attributes={"new_arrivals": [], "gone_quiet": []},
         )
         self.assertIn("No notable arrivals", nothing)
+        one_sided = self.render(
+            templates["MIGRATION_TEMPLATE"],
+            [],
+            attributes={
+                "new_arrivals": [],
+                "gone_quiet": [{"common_name": "Oriole", "days_since": 18}],
+            },
+        )
+        self.assertIn("**New arrivals · 0**", one_sided)
+        self.assertIn("**Gone quiet · 1**", one_sided)
         unavailable = self.render(templates["MIGRATION_TEMPLATE"], [], False)
         self.assertIn("enhanced database", unavailable)
 
@@ -113,13 +143,15 @@ class DashboardTests(unittest.TestCase):
             [],
             attributes={"new_arrivals": arrivals, "gone_quiet": quiet},
         )
+        self.assertIn("**New arrivals · 8**", output)
         self.assertIn("- Bird 0", output)
         self.assertIn("- Bird 2", output)
         self.assertNotIn("Bird 3", output)
-        self.assertIn("_+5 more arrivals_\n\n**Gone quiet · 5**", output)
-        self.assertIn("- Quiet 1 · 11 days", output)
-        self.assertNotIn("Quiet 2", output)
-        self.assertIn("_+3 more_", output)
+        self.assertIn("_+5 more_\n\n**Gone quiet · 5**", output)
+        self.assertIn("- Quiet 2 · 12 days", output)
+        self.assertNotIn("Quiet 3", output)
+        self.assertIn("_+2 more_", output)
+        self.assertNotIn("more arrivals", output)
 
     def test_history_is_a_compact_summary(self):
         output = self.render(
@@ -154,17 +186,24 @@ class DashboardTests(unittest.TestCase):
 
     def test_default_dashboard_uses_name_and_count_states(self):
         config = namespace["_default_config"](
-            "sensor.daily", "sensor.summary", "sensor.interest",
-            "http://birdnet.local", "sensor.latest", "sensor.detections",
-            "sensor.lifetime", "camera.latest_image", "sensor.foy",
-            "sensor.history", "sensor.migration",
+            "sensor.daily",
+            "sensor.summary",
+            "sensor.interest",
+            "http://birdnet.local",
+            "sensor.latest",
+            "sensor.detections",
+            "sensor.lifetime",
+            "camera.latest_image",
+            "sensor.foy",
+            "sensor.history",
+            "sensor.migration",
         )
         view = config["views"][0]
         self.assertEqual(view["max_columns"], 2)
         sections = view["sections"]
         self.assertEqual(
             [section["column_span"] for section in sections],
-            [2, 1, 1, 2, 1, 1, 2],
+            [2, 2, 2, 1, 1, 2],
         )
         hero = sections[0]["cards"][0]
         self.assertEqual(hero["type"], "picture-entity")
@@ -176,36 +215,66 @@ class DashboardTests(unittest.TestCase):
         )
         titles = [section["title"] for section in sections]
         self.assertIn("Trends", titles)
-        self.assertIn("First of year", titles)
+        self.assertNotIn("First of year", titles)
         trend = sections[titles.index("Trends")]["cards"]
-        self.assertEqual([card["entity"] for card in trend], [
-            "sensor.history", "sensor.migration",
-            "sensor.history", "sensor.migration",
-        ])
-        self.assertEqual([card["type"] for card in trend], [
-            "tile", "tile", "markdown", "markdown",
-        ])
-        foy_section = sections[titles.index("First of year")]["cards"]
-        self.assertEqual(foy_section[0]["type"], "tile")
-        self.assertEqual(foy_section[0]["entity"], "sensor.foy")
-        self.assertEqual(foy_section[1]["type"], "conditional")
-        self.assertEqual(foy_section[1]["conditions"][0]["entity"], "sensor.foy")
-        self.assertIn("None today", foy_section[1]["conditions"][0]["state_not"])
-        self.assertEqual(foy_section[1]["card"]["entity"], "sensor.daily")
+        self.assertEqual(
+            [card["entity"] for card in trend if card["type"] != "conditional"],
+            [
+                "sensor.history",
+                "sensor.migration",
+                "sensor.foy",
+                "sensor.history",
+                "sensor.migration",
+            ],
+        )
+        self.assertEqual(
+            [card["type"] for card in trend],
+            [
+                "tile",
+                "tile",
+                "tile",
+                "markdown",
+                "markdown",
+                "conditional",
+            ],
+        )
+        self.assertTrue(all(card["grid_options"]["columns"] == 4 for card in trend[:3]))
+        self.assertEqual(
+            [card["grid_options"]["columns"] for card in trend[3:]], [12, 6, 6]
+        )
+        foy_tile = trend[2]
+        self.assertEqual(foy_tile["name"], "First of year")
+        self.assertEqual(foy_tile["icon"], "mdi:calendar-star")
+        foy_card = trend[5]
+        self.assertEqual(foy_card["conditions"][0]["entity"], "sensor.foy")
+        self.assertIn("None today", foy_card["conditions"][0]["state_not"])
+        self.assertEqual(foy_card["card"]["entity"], "sensor.daily")
         self.assertIn("__HISTORY__", templates["HISTORY_TEMPLATE"])
         self.assertIn("__MIGRATION__", templates["MIGRATION_TEMPLATE"])
         self.assertIn("__DAILY__", templates["FIRST_OF_YEAR_TEMPLATE"])
         tiles = [card for card in sections[0]["cards"] if card["type"] == "tile"]
-        self.assertEqual([card["entity"] for card in tiles], [
-            "sensor.daily", "sensor.detections", "sensor.lifetime",
-            "sensor.latest", "sensor.interest",
-        ])
+        self.assertEqual(
+            [card["entity"] for card in tiles],
+            [
+                "sensor.daily",
+                "sensor.detections",
+                "sensor.lifetime",
+                "sensor.latest",
+                "sensor.interest",
+            ],
+        )
         self.assertTrue(all(card["grid_options"]["columns"] == 3 for card in tiles))
+        glance_icons = [card["icon"] for card in tiles]
+        self.assertEqual(len(glance_icons), len(set(glance_icons)))
         open_button = sections[0]["cards"][-1]
         self.assertEqual(open_button["type"], "button")
-        self.assertEqual(open_button["tap_action"], {
-            "action": "url", "url_path": "http://birdnet.local",
-        })
+        self.assertEqual(
+            open_button["tap_action"],
+            {
+                "action": "url",
+                "url_path": "http://birdnet.local",
+            },
+        )
         self.assertFalse(
             any(
                 card["type"] == "statistics-graph"
@@ -213,7 +282,7 @@ class DashboardTests(unittest.TestCase):
                 for card in section["cards"]
             )
         )
-        for section in sections[3:]:
+        for section in sections[2:]:
             for card in section["cards"]:
                 self.assertEqual(card["grid_options"]["columns"], 12)
 
