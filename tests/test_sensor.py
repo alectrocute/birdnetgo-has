@@ -4,6 +4,7 @@ import ast
 import datetime as dt
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 SOURCE = Path(__file__).resolve().parents[1] / "custom_components/birdnetgo/sensor.py"
@@ -12,7 +13,15 @@ sensor_classes = [
     node
     for node in module.body
     if isinstance(node, ast.ClassDef)
-    and node.name in ("BirdNETGoFirstOfYearSensor", "BirdNETGoFirstBirdTodaySensor")
+    and node.name
+    in (
+        "BirdNETGoFirstOfYearSensor",
+        "BirdNETGoFirstBirdTodaySensor",
+        "BirdNETGoDailySummarySensor",
+        "BirdNETGoSpeciesSummarySensor",
+        "BirdNETGoBirdsOfInterestSensor",
+        "BirdNETGoMigrationSensor",
+    )
 ]
 
 
@@ -54,10 +63,15 @@ class _StubDtUtil:
 
 namespace = {
     "Any": Any,
+    "ATTR_SPECIES_LIST": "species_list",
     "BirdNETGoEntity": object,
     "FIRST_OF_YEAR_EMPTY_STATE": "None today",
     "dt_util": _StubDtUtil,
     "datetime": dt.datetime,
+    "SensorDeviceClass": SimpleNamespace(TIMESTAMP="timestamp"),
+    "SensorStateClass": SimpleNamespace(
+        MEASUREMENT="measurement", TOTAL_INCREASING="total_increasing"
+    ),
 }
 exec(  # noqa: S102
     compile(ast.Module(body=sensor_classes, type_ignores=[]), str(SOURCE), "exec"),
@@ -146,6 +160,24 @@ class FirstBirdTodaySensorTests(unittest.TestCase):
             self.sensor(
                 [{"common_name": "Blue Jay", "first_heard": "garbage"}]
             ).native_value
+        )
+
+
+class RecorderExclusionTests(unittest.TestCase):
+    def test_bulky_list_attributes_are_unrecorded(self):
+        for name in (
+            "BirdNETGoDailySummarySensor",
+            "BirdNETGoSpeciesSummarySensor",
+            "BirdNETGoBirdsOfInterestSensor",
+        ):
+            self.assertEqual(
+                namespace[name]._unrecorded_attributes,
+                {"species_list"},
+                name,
+            )
+        self.assertEqual(
+            namespace["BirdNETGoMigrationSensor"]._unrecorded_attributes,
+            {"new_arrivals", "gone_quiet"},
         )
 
 

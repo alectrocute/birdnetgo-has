@@ -119,6 +119,9 @@ class BirdNETGoDailySummarySensor(BirdNETGoEntity):
     _id_suffix = "daily_summary"
     _attr_native_unit_of_measurement = "species"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    # The list exists for dashboard templates; it can outgrow the recorder's
+    # attribute size limit, so keep it out of the database.
+    _unrecorded_attributes = frozenset({ATTR_SPECIES_LIST})
 
     @property
     def native_value(self) -> int:
@@ -140,6 +143,8 @@ class BirdNETGoSpeciesSummarySensor(BirdNETGoEntity):
     _attr_icon = "mdi:clock-outline"
     _id_suffix = "species_summary"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
+    # The lifetime list easily exceeds the recorder's attribute size limit.
+    _unrecorded_attributes = frozenset({ATTR_SPECIES_LIST})
 
     @property
     def native_value(self) -> datetime | None:
@@ -166,6 +171,7 @@ class BirdNETGoBirdsOfInterestSensor(BirdNETGoEntity):
     _id_suffix = "birds_of_interest"
     _attr_native_unit_of_measurement = "species"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _unrecorded_attributes = frozenset({ATTR_SPECIES_LIST})
 
     def _filtered_species(self) -> list[dict[str, Any]]:
         """Return summary species matching the configured interest list."""
@@ -450,6 +456,8 @@ class BirdNETGoMigrationSensor(BirdNETGoEntity):
     _attr_name = "Migration activity"
     _attr_icon = "mdi:airplane"
     _id_suffix = "migration"
+    # The gone-quiet list alone can hold hundreds of species.
+    _unrecorded_attributes = frozenset({"new_arrivals", "gone_quiet"})
 
     @property
     def available(self) -> bool:
