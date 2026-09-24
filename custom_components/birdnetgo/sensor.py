@@ -63,7 +63,7 @@ class BirdNETGoEntity(CoordinatorEntity[BirdNETGoCoordinator], SensorEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=DEFAULT_NAME,
             manufacturer="BirdNET-Go",
-            model="BirdNET-Go analytics",
+            model="BirdNET-Go stats",
             configuration_url=coordinator.base_url,
         )
 
@@ -194,8 +194,7 @@ class BirdNETGoDetectionsTodaySensor(BirdNETGoEntity):
     _id_suffix = "detections_today"
     _attr_native_unit_of_measurement = "detections"
     # total_increasing is the correct class for a counter that resets at
-    # midnight; the dashboard's statistics-graph charts its daily max, where
-    # each day's peak equals that day's detection total.
+    # midnight.
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
 
     @property

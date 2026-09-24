@@ -56,7 +56,7 @@ class BirdNETGoLatestBirdCamera(CoordinatorEntity[BirdNETGoCoordinator], Camera)
             identifiers={(DOMAIN, entry.entry_id)},
             name=DEFAULT_NAME,
             manufacturer="BirdNET-Go",
-            model="BirdNET-Go analytics",
+            model="BirdNET-Go stats",
             configuration_url=coordinator.base_url,
         )
         self._cached_image: tuple[str, bytes] | None = None

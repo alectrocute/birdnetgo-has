@@ -4,6 +4,8 @@
 
 Home Assistant integration for [BirdNET-Go](https://github.com/tphakala/birdnet-go). It reads the analytics API and adds sensors, an editable Birds dashboard, and optional notifications. Requires BirdNET-Go nightly-20250427 or newer.
 
+This is a read-only **stats device**: it polls BirdNET-Go's analytics API and never authenticates against your instance, so it cannot change settings, detections, or configuration there.
+
 ## Screenshots
 
 ![The Birds dashboard](.github/images/dashboard.png)

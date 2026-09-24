@@ -20,6 +20,9 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+          # The brand check passes once the integration is merged into
+          # home-assistant/brands; ignore it until that PR lands.
+          ignore: brands
 
   validate-hassfest:
     name: Hassfest Validation

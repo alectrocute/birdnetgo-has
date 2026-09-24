@@ -105,11 +105,14 @@ class DashboardTests(unittest.TestCase):
             "sensor.daily", "sensor.detections", "sensor.latest", "sensor.interest",
         ])
         self.assertTrue(all(card["grid_options"]["columns"] == 3 for card in tiles))
-        trend = sections[1]["cards"][0]
-        self.assertEqual(trend["type"], "statistics-graph")
-        self.assertEqual(trend["entities"][0]["entity"], "sensor.detections")
-        self.assertEqual(trend["stat_types"], ["max"])
-        for section in sections[2:]:
+        self.assertFalse(
+            any(
+                card["type"] == "statistics-graph"
+                for section in sections
+                for card in section["cards"]
+            )
+        )
+        for section in sections[1:]:
             self.assertEqual(section["cards"][0]["grid_options"]["columns"], 12)
 
 

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to BirdNET-Go",
-        "description": "Connect your analyzer to Home Assistant. BirdNET-Go nightly-20250427 or newer is required.",
+        "description": "Connect your analyzer to Home Assistant. This is a read-only stats integration: it polls the analytics API and never changes your BirdNET-Go settings. BirdNET-Go nightly-20250427 or newer is required.",
         "data": {
           "host": "Host or address",
           "port": "Port",

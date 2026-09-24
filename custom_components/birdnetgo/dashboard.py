@@ -260,30 +260,6 @@ def _default_config(
                     },
                     {
                         "type": "grid",
-                        "title": "Detections trend",
-                        "column_span": 1,
-                        "cards": [
-                            {
-                                "type": "statistics-graph",
-                                "entities": [
-                                    {"entity": detections_entity, "name": "Detections"}
-                                ],
-                                # The sensor resets at midnight and grows during
-                                # the day, so each day's max equals that day's
-                                # detection total. Unlike `change`, max has data
-                                # from the first statistics bucket, so the card
-                                # is never blank on a fresh install.
-                                "stat_types": ["max"],
-                                "period": "day",
-                                "chart_type": "bar",
-                                "days_to_show": 30,
-                                "hide_legend": True,
-                                "grid_options": {"columns": 12, "rows": 3},
-                            }
-                        ],
-                    },
-                    {
-                        "type": "grid",
                         "title": "Today's visitors",
                         "column_span": 1,
                         "cards": [
