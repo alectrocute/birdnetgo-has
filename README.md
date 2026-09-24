@@ -27,7 +27,7 @@ In **Settings > Devices & services > Add integration**, select BirdNET-Go and en
 | `sensor.birdnet_latest_bird` | Common name of the most recently heard species |
 | `sensor.birdnet_detections_today` | Total detections today |
 | `sensor.birdnet_daily_summary` | Unique species today |
-| `sensor.birdnet_first_of_year` | Newest species heard for the first time this year |
+| `sensor.birdnet_first_of_year` | Newest first-of-year species heard today, or `None today` |
 | `sensor.birdnet_first_bird_today` | Species that started the day (earliest first detection) |
 | `sensor.birdnet_detection_history` | Yesterday's detections; `daily_counts` and `sparkline` attributes cover the last 30 days |
 | `sensor.birdnet_migration` | Count of new arrivals this season; `new_arrivals` and `gone_quiet` attributes |
@@ -36,13 +36,12 @@ In **Settings > Devices & services > Add integration**, select BirdNET-Go and en
 | `sensor.birdnet_birds_of_interest` | Configured species heard all time |
 | `sensor.birdnet_species_summary` | Timestamp of the latest detection |
 | `camera.birdnet_latest_bird_image` | BirdNET-Go species image of the latest bird |
-| `camera.birdnet_first_of_year_image` | Species image of the newest first-of-year bird |
 
 The name sensors also expose `last_heard` and `species_code` attributes (the latest bird also includes `scientific_name` and, when the server provides it, `avg_confidence`/`max_confidence`). The summary sensors expose `species_list` for dashboard cards and automations. Home Assistant may assign different entity IDs if those names are already in use.
 
 The migration sensor and rare-return alerts use BirdNET-Go's insights API, which requires BirdNET-Go's enhanced database (v2). On older builds the sensor reports unavailable and alerts fall back to comparing consecutive polls. Rare-return alerts also use the server-computed absence length when available, so returns that happen while Home Assistant restarts are not missed.
 
-The dashboard is created automatically and can be edited. To restore its default layout, use **Configure > Dashboard > Restore the default layout** (this overwrites your edits).
+The dashboard is created automatically and can be edited. To apply dashboard layout changes after an update, use **Configure > Dashboard > Restore the default layout** (this overwrites your edits).
 
 The analytics API returns species summaries, not individual detection events. The latest bird is the species with the newest `last_heard` timestamp; polls can miss intermediate observations. Notification alerts are optional and may arrive up to one polling interval late. For per-detection camera and confidence data, see [webhook automations](docs/advanced-automations.md).
 

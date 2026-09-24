@@ -24,6 +24,7 @@ from .const import (
     ATTR_SPECIES_LIST,
     DEFAULT_NAME,
     DOMAIN,
+    FIRST_OF_YEAR_EMPTY_STATE,
 )
 from .coordinator import BirdNETGoCoordinator, latest_species
 
@@ -292,7 +293,7 @@ class BirdNETGoFirstOfYearSensor(BirdNETGoEntity):
     """Most recently heard species that is new this year.
 
     Year lists are a birder tradition, so the first detection of a species
-    in the calendar year is worth its own sensor and image.
+    in the calendar year is worth its own sensor.
     """
 
     _attr_name = "Latest first-of-year bird"
@@ -307,16 +308,28 @@ class BirdNETGoFirstOfYearSensor(BirdNETGoEntity):
             if isinstance(bird, dict) and bird.get("is_new_this_year")
         ]
 
+    def _latest_new_this_year(self) -> dict[str, Any] | None:
+        """Pick the last heard bird; daily rows use latest_heard, not last_heard."""
+        return max(
+            (
+                bird
+                for bird in self._new_this_year()
+                if bird.get("common_name") and bird.get("latest_heard")
+            ),
+            key=lambda bird: str(bird["latest_heard"]),
+            default=None,
+        )
+
     @property
-    def native_value(self) -> str | None:
-        """Return the newest first-of-year species' common name."""
-        bird = self._latest_species(self._new_this_year())
-        return str(bird["common_name"]) if bird else None
+    def native_value(self) -> str:
+        """Return the newest first-of-year bird or a readable empty state."""
+        bird = self._latest_new_this_year()
+        return str(bird["common_name"]) if bird else FIRST_OF_YEAR_EMPTY_STATE
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose when the species was first heard this year."""
-        bird = self._latest_species(self._new_this_year())
+        """Expose today's first-heard time and the species code."""
+        bird = self._latest_new_this_year()
         return (
             {key: bird[key] for key in ("first_heard", "species_code") if key in bird}
             if bird

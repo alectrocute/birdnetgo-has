@@ -51,6 +51,8 @@ ATTR_FRONTEND_URL = "frontend_url"
 ATTR_SPECIES_LIST = "species_list"
 ATTR_DAILY_COUNTS = "daily_counts"
 
+FIRST_OF_YEAR_EMPTY_STATE = "None today"
+
 # Auto-created dashboard
 DASHBOARD_URL_PATH = "birdnetgo"
 DASHBOARD_ID = "birdnetgo"

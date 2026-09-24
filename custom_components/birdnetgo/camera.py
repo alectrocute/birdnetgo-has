@@ -11,6 +11,7 @@ from aiohttp import ClientError
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -36,12 +37,15 @@ async def async_setup_entry(
 ) -> None:
     """Set up the BirdNET-Go cameras from a config entry."""
     coordinator: BirdNETGoCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        [
-            BirdNETGoLatestBirdCamera(coordinator, entry),
-            BirdNETGoFirstOfYearCamera(coordinator, entry),
-        ]
+    async_add_entities([BirdNETGoLatestBirdCamera(coordinator, entry)])
+
+    # Remove the old camera from the entity registry as well as the dashboard.
+    registry = er.async_get(hass)
+    old_image = registry.async_get_entity_id(
+        "camera", DOMAIN, f"{entry.entry_id}_first_of_year_image"
     )
+    if old_image:
+        registry.async_remove(old_image)
 
 
 class BirdNETGoSpeciesCamera(CoordinatorEntity[BirdNETGoCoordinator], Camera):
@@ -163,23 +167,3 @@ class BirdNETGoLatestBirdCamera(BirdNETGoSpeciesCamera):
     def _species(self) -> dict[str, Any] | None:
         """Return the most recently heard species."""
         return latest_species(self.coordinator.data.summary_species)
-
-
-class BirdNETGoFirstOfYearCamera(BirdNETGoSpeciesCamera):
-    """Still image of the newest species heard for the first time this year."""
-
-    _attr_name = "First-of-year bird image"
-    _attr_icon = "mdi:calendar-star"
-    _id_suffix = "first_of_year_image"
-
-    def _species(self) -> dict[str, Any] | None:
-        """Return the newest first-of-year species from today's summary."""
-        daily = getattr(self.coordinator.data, "daily_species", []) or []
-        new_this_year = [
-            bird
-            for bird in daily
-            if isinstance(bird, dict)
-            and bird.get("is_new_this_year")
-            and bird.get("scientific_name")
-        ]
-        return latest_species(new_this_year)

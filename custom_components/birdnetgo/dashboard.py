@@ -22,25 +22,13 @@ from .const import (
     DASHBOARD_TITLE,
     DASHBOARD_URL_PATH,
     DOMAIN,
+    FIRST_OF_YEAR_EMPTY_STATE,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_STORAGE_KEY = "lovelace.birdnetgo"
 CONFIG_STORAGE_VERSION = 1
-
-OVERVIEW_TEMPLATE = """### 🐦 BirdNET-Go
-{% set daily = state_attr('__DAILY__', 'species_list') or [] %}
-{% set summary = state_attr('__SPECIES__', 'species_list') or [] %}
-{% if not has_value('__DAILY__') %}
-BirdNET-Go is currently offline.
-{% elif daily | count > 0 %}
-**{{ daily | count }} species** heard today · **{{ daily | sum(attribute='count') | int }}** detections
-{% else %}
-Quiet so far today — waiting for a detection.
-{% endif %}
-**{{ summary | count }} species** heard all time
-[Open BirdNET-Go](__BASE_URL__)"""
 
 DAILY_TEMPLATE = """{% if has_value('__DAILY__') -%}
 {% set species_data = state_attr('__DAILY__', 'species_list') or [] -%}
@@ -123,21 +111,25 @@ No recent bird data available.
 Waiting for BirdNET-Go…
 {% endif %}"""
 
+# BirdNET-Go omits is_new_this_year when false, so filter defined entries first.
 FIRST_OF_YEAR_TEMPLATE = """{% if has_value('__DAILY__') -%}
 {% set species_data = state_attr('__DAILY__', 'species_list') or [] -%}
-{% set foy = species_data | selectattr('is_new_this_year') | list -%}
+{% set foy = species_data | selectattr('is_new_this_year', 'defined') | selectattr('is_new_this_year') | list -%}
 {% if foy | count > 0 -%}
-| Species | First heard |
-| :-- | --: |
-{% for bird in foy | sort(attribute='first_heard') -%}
-{% set time = bird.get('first_heard', '1970-01-01 00:00:00') -%}
-{% set name = bird.get('common_name', 'Unknown') -%}
-{% set species_code = bird.get('species_code', '') -%}
+{% for bird in foy[:5] -%}
+{% set time = bird.get('first_heard') -%}
+{% set name = bird.get('common_name') or 'Unknown' -%}
+{% set species_code = bird.get('species_code') or '' -%}
 {% set ebird_url = 'https://ebird.org/species/' ~ species_code -%}
-{% if species_code | length >= 1 and species_code | length <= 7 %}[{{ name }}]({{ ebird_url }}){% else %}{{ name }}{% endif %} | {{ as_datetime(time) | as_timestamp | timestamp_custom('%H:%M', true) }}
-{% endfor %}
+- {% if species_code | length >= 1 and species_code | length <= 7 %}[{{ name }}]({{ ebird_url }}){% else %}{{ name }}{% endif %}{% if time %} · {{ today_at(time) | as_timestamp | timestamp_custom('%H:%M', true) }}{% endif %}
+{% endfor -%}
+{% if foy | count > 5 -%}
+_+{{ foy | count - 5 }} more first-of-year species_
+{% endif -%}
+{% elif species_data | count == 0 -%}
+No birds heard yet today.
 {% else -%}
-No new species for the year list yet today.
+No first-of-year sightings today.
 {% endif -%}
 {% else -%}
 Waiting for BirdNET-Go…
@@ -145,14 +137,10 @@ Waiting for BirdNET-Go…
 
 HISTORY_TEMPLATE = """{% if has_value('__HISTORY__') -%}
 {% set counts = state_attr('__HISTORY__', 'daily_counts') or {} -%}
-{% set spark = state_attr('__HISTORY__', 'sparkline') -%}
 {% if counts | count > 1 -%}
-**{{ counts.values() | sum }} detections** over the last {{ counts | count }} days · best day **{{ counts.values() | max }}**
-{% if spark %}
-{{ spark }}
-{% endif -%}
+**{{ counts.values() | sum }} detections** in {{ counts | count }} days · best day **{{ counts.values() | max }}**
 {% elif counts | count == 1 -%}
-Only one day of history so far — **{{ counts.values() | sum }} detections**.
+**{{ counts.values() | sum }} detections** · one day of history so far.
 {% else -%}
 No detection history yet.
 {% endif -%}
@@ -164,14 +152,34 @@ MIGRATION_TEMPLATE = """{% set arrivals = state_attr('__MIGRATION__', 'new_arriv
 {% set quiet = state_attr('__MIGRATION__', 'gone_quiet') -%}
 {% if arrivals is none and quiet is none -%}
 Migration insights need a newer BirdNET-Go with the enhanced database.
-{% elif (arrivals or []) | count == 0 and (quiet or []) | count == 0 -%}
+{% else -%}
+{% set arrivals = arrivals or [] -%}
+{% set quiet = quiet or [] -%}
+{% if arrivals | count == 0 and quiet | count == 0 -%}
 No notable arrivals or departures lately.
 {% else -%}
-{% if (arrivals or []) | count > 0 -%}
-**New arrivals:** {{ arrivals | join(', ') }}
+{% if arrivals | count > 0 -%}
+{% for bird in arrivals[:3] -%}
+- {{ bird }}
+{% endfor %}
+{% if arrivals | count > 3 -%}
+_+{{ arrivals | count - 3 }} more arrivals_
 {% endif -%}
-{% if (quiet or []) | count > 0 -%}
-**Gone quiet:** {% for bird in quiet %}{{ bird.get('common_name') }} ({{ bird.get('days_since') }} days){% if not loop.last %}, {% endif %}{% endfor %}
+{% else -%}
+No new arrivals recently.
+{% endif %}
+**Gone quiet · {{ quiet | count }}**
+
+{% if quiet | count > 0 -%}
+{% for bird in quiet[:2] -%}
+- {{ bird.get('common_name') or 'Unknown' }} · {{ bird.get('days_since') or '?' }} days
+{% endfor %}
+{% if quiet | count > 2 -%}
+_+{{ quiet | count - 2 }} more_
+{% endif -%}
+{% else -%}
+None recently.
+{% endif -%}
 {% endif -%}
 {% endif %}"""
 
@@ -203,15 +211,14 @@ def _render(content: str, replacements: dict[str, str]) -> str:
     return content
 
 
-def _tile(entity: str, name: str, icon: str) -> dict[str, Any]:
+def _tile(entity: str, name: str, icon: str, columns: int = 3) -> dict[str, Any]:
     """Build a themed summary tile."""
     return {
         "type": "tile",
         "entity": entity,
         "name": name,
         "icon": icon,
-        "state_color": True,
-        "grid_options": {"columns": 3, "rows": 1},
+        "grid_options": {"columns": columns, "rows": 1},
     }
 
 
@@ -222,9 +229,9 @@ def _default_config(
     base_url: str,
     latest_bird_entity: str,
     detections_entity: str,
+    lifetime_entity: str,
     camera_entity: str,
     foy_entity: str,
-    foy_camera_entity: str,
     history_entity: str,
     migration_entity: str,
 ) -> dict[str, Any]:
@@ -233,12 +240,9 @@ def _default_config(
         "__DAILY__": daily_entity,
         "__SPECIES__": species_entity,
         "__INTEREST__": interest_entity,
-        "__BASE_URL__": base_url,
-        "__FOY__": foy_entity,
         "__HISTORY__": history_entity,
         "__MIGRATION__": migration_entity,
     }
-    overview = _render(OVERVIEW_TEMPLATE, replacements)
     daily = _render(DAILY_TEMPLATE, replacements)
     latest = _render(LATEST_TEMPLATE, replacements)
     brand_new = _render(BRAND_NEW_TEMPLATE, replacements)
@@ -255,33 +259,32 @@ def _default_config(
                 "icon": DASHBOARD_ICON,
                 "path": "birds",
                 "type": "sections",
-                "max_columns": 1,
+                "max_columns": 2,
                 "sections": [
                     {
                         "type": "grid",
                         "title": "At a glance",
-                        "column_span": 1,
+                        "column_span": 2,
                         "cards": [
                             {
                                 "type": "picture-entity",
                                 "entity": latest_bird_entity,
                                 "camera_image": camera_entity,
                                 "camera_view": "auto",
-                                "show_name": True,
-                                "show_state": True,
-                                "grid_options": {"columns": 12, "rows": 5},
-                            },
-                            {
-                                "type": "markdown",
-                                "entity": daily_entity,
-                                "content": overview,
-                                "grid_options": {"columns": 12},
+                                "show_name": False,
+                                "show_state": False,
+                                "grid_options": {"columns": 6, "rows": 3},
                             },
                             _tile(daily_entity, "Species today", "mdi:calendar-today"),
                             _tile(
                                 detections_entity,
                                 "Detections today",
                                 "mdi:counter",
+                            ),
+                            _tile(
+                                lifetime_entity,
+                                "Species all time",
+                                "mdi:bird",
                             ),
                             _tile(latest_bird_entity, "Latest bird", "mdi:bird"),
                             _tile(
@@ -290,14 +293,11 @@ def _default_config(
                                 "mdi:heart-outline",
                             ),
                             {
-                                "type": "picture-entity",
-                                "entity": foy_entity,
-                                "camera_image": foy_camera_entity,
-                                "camera_view": "auto",
-                                "show_name": True,
-                                "show_state": True,
-                                "name": "First of year",
-                                "grid_options": {"columns": 12, "rows": 4},
+                                "type": "button",
+                                "name": "Open BirdNET-Go",
+                                "icon": "mdi:open-in-new",
+                                "tap_action": {"action": "url", "url_path": base_url},
+                                "grid_options": {"columns": 3, "rows": 1},
                             },
                         ],
                     },
@@ -306,6 +306,12 @@ def _default_config(
                         "title": "Trends",
                         "column_span": 1,
                         "cards": [
+                            _tile(history_entity, "Yesterday", "mdi:chart-bar"),
+                            _tile(
+                                migration_entity,
+                                "New arrivals",
+                                "mdi:bird",
+                            ),
                             {
                                 "type": "markdown",
                                 "entity": history_entity,
@@ -325,19 +331,38 @@ def _default_config(
                         "title": "First of year",
                         "column_span": 1,
                         "cards": [
+                            _tile(
+                                foy_entity,
+                                "First of year",
+                                "mdi:calendar-star",
+                                columns=12,
+                            ),
                             {
-                                "type": "markdown",
-                                "entity": foy_entity,
-                                "content": foy,
-                                "show_header_toggle": False,
+                                "type": "conditional",
+                                "conditions": [
+                                    {
+                                        "condition": "state",
+                                        "entity": foy_entity,
+                                        "state_not": [
+                                            FIRST_OF_YEAR_EMPTY_STATE,
+                                            "unknown",
+                                            "unavailable",
+                                        ],
+                                    }
+                                ],
+                                "card": {
+                                    "type": "markdown",
+                                    "entity": daily_entity,
+                                    "content": foy,
+                                },
                                 "grid_options": {"columns": 12},
-                            }
+                            },
                         ],
                     },
                     {
                         "type": "grid",
                         "title": "Today's visitors",
-                        "column_span": 1,
+                        "column_span": 2,
                         "cards": [
                             {
                                 "type": "markdown",
@@ -379,7 +404,7 @@ def _default_config(
                     {
                         "type": "grid",
                         "title": "Birds of interest",
-                        "column_span": 1,
+                        "column_span": 2,
                         "cards": [
                             {
                                 "type": "markdown",
@@ -439,11 +464,9 @@ def _resolve_entities(hass: HomeAssistant, entry_id: str) -> tuple[str, ...]:
         entity_id("sensor", "birds_of_interest", "sensor.birdnet_birds_of_interest"),
         entity_id("sensor", "latest_bird", "sensor.birdnet_latest_bird"),
         entity_id("sensor", "detections_today", "sensor.birdnet_detections_today"),
+        entity_id("sensor", "lifetime_species", "sensor.birdnet_lifetime_species"),
         entity_id("camera", "latest_bird_image", "camera.birdnet_latest_bird_image"),
         entity_id("sensor", "first_of_year", "sensor.birdnet_first_of_year"),
-        entity_id(
-            "camera", "first_of_year_image", "camera.birdnet_first_of_year_image"
-        ),
         entity_id("sensor", "detections_history", "sensor.birdnet_detection_history"),
         entity_id("sensor", "migration", "sensor.birdnet_migration"),
     )
