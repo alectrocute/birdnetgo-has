@@ -19,6 +19,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     ATTR_BASE_URL,
+    ATTR_DAILY_COUNTS,
     ATTR_FRONTEND_URL,
     ATTR_SPECIES_LIST,
     DEFAULT_NAME,
@@ -43,6 +44,10 @@ async def async_setup_entry(
             BirdNETGoLifetimeSpeciesSensor(coordinator, entry),
             BirdNETGoLatestBirdSensor(coordinator, entry),
             BirdNETGoLatestInterestSensor(coordinator, entry),
+            BirdNETGoFirstOfYearSensor(coordinator, entry),
+            BirdNETGoFirstBirdTodaySensor(coordinator, entry),
+            BirdNETGoDetectionsHistorySensor(coordinator, entry),
+            BirdNETGoMigrationSensor(coordinator, entry),
         ]
     )
 
@@ -241,15 +246,20 @@ class BirdNETGoLatestBirdSensor(BirdNETGoEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose only the useful details of the latest species."""
         bird = self._latest_species(self._species_list("summary_species"))
-        return (
-            {
-                key: bird[key]
-                for key in ("last_heard", "species_code", "scientific_name", "count")
-                if key in bird
-            }
-            if bird
-            else {}
-        )
+        if not bird:
+            return {}
+        attrs = {
+            key: bird[key]
+            for key in ("last_heard", "species_code", "scientific_name", "count")
+            if key in bird
+        }
+        # Detection confidence, when the server provides it, so a confident
+        # ID can be told apart from a doubtful one.
+        for key in ("avg_confidence", "max_confidence"):
+            value = bird.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                attrs[key] = round(float(value), 4)
+        return attrs
 
 
 class BirdNETGoLatestInterestSensor(BirdNETGoBirdsOfInterestSensor):
@@ -276,3 +286,184 @@ class BirdNETGoLatestInterestSensor(BirdNETGoBirdsOfInterestSensor):
             if bird
             else {}
         )
+
+
+class BirdNETGoFirstOfYearSensor(BirdNETGoEntity):
+    """Most recently heard species that is new this year.
+
+    Year lists are a birder tradition, so the first detection of a species
+    in the calendar year is worth its own sensor and image.
+    """
+
+    _attr_name = "Latest first-of-year bird"
+    _attr_icon = "mdi:calendar-star"
+    _id_suffix = "first_of_year"
+
+    def _new_this_year(self) -> list[dict[str, Any]]:
+        """Return today's species flagged as new for the year."""
+        return [
+            bird
+            for bird in self._species_list("daily_species")
+            if isinstance(bird, dict) and bird.get("is_new_this_year")
+        ]
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the newest first-of-year species' common name."""
+        bird = self._latest_species(self._new_this_year())
+        return str(bird["common_name"]) if bird else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose when the species was first heard this year."""
+        bird = self._latest_species(self._new_this_year())
+        return (
+            {key: bird[key] for key in ("first_heard", "species_code") if key in bird}
+            if bird
+            else {}
+        )
+
+
+class BirdNETGoFirstBirdTodaySensor(BirdNETGoEntity):
+    """Species that started the day, i.e. the earliest first_heard today."""
+
+    _attr_name = "First bird today"
+    _attr_icon = "mdi:weather-sunset-up"
+    _id_suffix = "first_bird_today"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the common name of the first species heard today."""
+        bird = self._first_bird()
+        return str(bird["common_name"]) if bird else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the first-heard time of the day's earliest species."""
+        bird = self._first_bird()
+        return (
+            {key: bird[key] for key in ("first_heard", "species_code") if key in bird}
+            if bird
+            else {}
+        )
+
+    def _first_bird(self) -> dict[str, Any] | None:
+        """Find the species with the earliest first_heard timestamp today."""
+        first: dict[str, Any] | None = None
+        first_time: datetime | None = None
+        for bird in self._species_list("daily_species"):
+            if not isinstance(bird, dict) or not bird.get("common_name"):
+                continue
+            parsed = dt_util.parse_datetime(str(bird.get("first_heard") or ""))
+            if parsed is None:
+                continue
+            if first_time is None or parsed < first_time:
+                first, first_time = bird, parsed
+        return first
+
+
+class BirdNETGoDetectionsHistorySensor(BirdNETGoEntity):
+    """Daily detection counts for the last month, from BirdNET-Go's own history.
+
+    Unlike Home Assistant statistics this works immediately on a fresh
+    install, because BirdNET-Go already has the data.
+    """
+
+    _attr_name = "Detection history"
+    _attr_icon = "mdi:chart-bar"
+    _id_suffix = "detections_history"
+    _attr_native_unit_of_measurement = "detections"
+    _attr_state_class = None
+
+    @property
+    def native_value(self) -> int:
+        """Return yesterday's detection count (today is still counting)."""
+        history = self._history()
+        if len(history) < 2:
+            return 0
+        return int(history[-2]["count"])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the per-day counts and a compact text sparkline."""
+        history = self._history()
+        attrs: dict[str, Any] = {
+            ATTR_DAILY_COUNTS: {row["date"]: row["count"] for row in history}
+        }
+        if history:
+            attrs["sparkline"] = _sparkline([int(row["count"]) for row in history])
+        return attrs
+
+    def _history(self) -> list[dict[str, Any]]:
+        """Return the per-day counts sorted oldest first."""
+        rows = getattr(self.coordinator.data, "daily_history", []) or []
+        return sorted(rows, key=lambda row: row["date"])
+
+
+def _sparkline(counts: list[int]) -> str:
+    """Render daily counts as a compact bar of unicode block characters."""
+    if not counts:
+        return ""
+    blocks = "▁▂▃▄▅▆▇█"
+    peak = max(counts)
+    if peak <= 0:
+        return blocks[0] * len(counts)
+    return "".join(
+        blocks[min(int(count * len(blocks) / peak), len(blocks) - 1)]
+        for count in counts
+    )
+
+
+class BirdNETGoMigrationSensor(BirdNETGoEntity):
+    """Migration activity: species that just arrived or went quiet.
+
+    Requires a BirdNET-Go build with the insights API (enhanced database);
+    the sensor reports unavailable otherwise.
+    """
+
+    _attr_name = "Migration activity"
+    _attr_icon = "mdi:airplane"
+    _id_suffix = "migration"
+
+    @property
+    def available(self) -> bool:
+        """Be unavailable when the insights endpoint is not supported."""
+        return bool(self._migration())
+
+    def _migration(self) -> dict[str, Any]:
+        """Return the migration payload from the coordinator."""
+        if self.coordinator.data is None:
+            return {}
+        return getattr(self.coordinator.data, "migration", {}) or {}
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the number of new arrivals over the recent window."""
+        arrivals = self._migration().get("new_arrivals")
+        return len(arrivals) if isinstance(arrivals, list) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the arrival and departure lists."""
+        migration = self._migration()
+        attrs: dict[str, Any] = {}
+        arrivals = migration.get("new_arrivals")
+        quiet = migration.get("gone_quiet")
+        if isinstance(arrivals, list):
+            attrs["new_arrivals"] = [
+                bird.get("common_name")
+                for bird in arrivals
+                if isinstance(bird, dict)
+            ]
+        if isinstance(quiet, list):
+            attrs["gone_quiet"] = [
+                {
+                    "common_name": bird.get("common_name"),
+                    "days_since": bird.get("days_since"),
+                }
+                for bird in quiet
+                if isinstance(bird, dict)
+            ]
+        if isinstance(migration.get("recent_days"), int):
+            attrs["recent_days"] = migration["recent_days"]
+        return attrs

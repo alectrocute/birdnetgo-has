@@ -39,11 +39,17 @@ REQUEST_TIMEOUT = 30
 
 DAILY_SUMMARY_ENDPOINT = "/api/v2/analytics/species/daily"
 SPECIES_SUMMARY_ENDPOINT = "/api/v2/analytics/species/summary"
+DAILY_HISTORY_ENDPOINT = "/api/v2/analytics/time/daily"
+MIGRATION_ENDPOINT = "/api/v2/insights/migration"
 MEDIA_IMAGE_ENDPOINT = "/api/v2/media/image/"
+
+# Length of the detection-history window in days
+DAILY_HISTORY_DAYS = 30
 
 ATTR_BASE_URL = "base_url"
 ATTR_FRONTEND_URL = "frontend_url"
 ATTR_SPECIES_LIST = "species_list"
+ATTR_DAILY_COUNTS = "daily_counts"
 
 # Auto-created dashboard
 DASHBOARD_URL_PATH = "birdnetgo"

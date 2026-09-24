@@ -1,9 +1,10 @@
-"""Camera showing the BirdNET-Go image of the latest detected bird."""
+"""Cameras showing BirdNET-Go species images."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 from urllib.parse import quote
 
 from aiohttp import ClientError
@@ -33,18 +34,23 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities,
 ) -> None:
-    """Set up the BirdNET-Go camera from a config entry."""
+    """Set up the BirdNET-Go cameras from a config entry."""
     coordinator: BirdNETGoCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([BirdNETGoLatestBirdCamera(coordinator, entry)])
+    async_add_entities(
+        [
+            BirdNETGoLatestBirdCamera(coordinator, entry),
+            BirdNETGoFirstOfYearCamera(coordinator, entry),
+        ]
+    )
 
 
-class BirdNETGoLatestBirdCamera(CoordinatorEntity[BirdNETGoCoordinator], Camera):
-    """Still image of the most recently heard species, served by BirdNET-Go."""
+class BirdNETGoSpeciesCamera(CoordinatorEntity[BirdNETGoCoordinator], Camera):
+    """Still image of a species, served by BirdNET-Go."""
 
     _attr_has_entity_name = False
     _attr_icon = "mdi:bird"
-    _attr_name = "Latest bird image"
-    _id_suffix = "latest_bird_image"
+
+    _id_suffix = "camera"
 
     def __init__(self, coordinator: BirdNETGoCoordinator, entry: ConfigEntry) -> None:
         """Initialize the camera."""
@@ -67,13 +73,17 @@ class BirdNETGoLatestBirdCamera(CoordinatorEntity[BirdNETGoCoordinator], Camera)
         """Use a predictable entity id for the default dashboard."""
         return f"birdnet_{self._id_suffix}"
 
+    def _species(self) -> dict[str, Any] | None:
+        """Return the species this camera should show."""
+        raise NotImplementedError
+
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
         """Return the species image from BirdNET-Go."""
         if self.coordinator.data is None:
             return None
-        bird = latest_species(self.coordinator.data.summary_species)
+        bird = self._species()
         scientific_name = str((bird or {}).get("scientific_name") or "").strip()
         if not scientific_name:
             return None
@@ -142,3 +152,34 @@ class BirdNETGoLatestBirdCamera(CoordinatorEntity[BirdNETGoCoordinator], Camera)
             return
         _LOGGER.warning("Could not load the image for %s: %s", scientific_name, detail)
         self._warned_species.add(scientific_name)
+
+
+class BirdNETGoLatestBirdCamera(BirdNETGoSpeciesCamera):
+    """Still image of the most recently heard species."""
+
+    _attr_name = "Latest bird image"
+    _id_suffix = "latest_bird_image"
+
+    def _species(self) -> dict[str, Any] | None:
+        """Return the most recently heard species."""
+        return latest_species(self.coordinator.data.summary_species)
+
+
+class BirdNETGoFirstOfYearCamera(BirdNETGoSpeciesCamera):
+    """Still image of the newest species heard for the first time this year."""
+
+    _attr_name = "First-of-year bird image"
+    _attr_icon = "mdi:calendar-star"
+    _id_suffix = "first_of_year_image"
+
+    def _species(self) -> dict[str, Any] | None:
+        """Return the newest first-of-year species from today's summary."""
+        daily = getattr(self.coordinator.data, "daily_species", []) or []
+        new_this_year = [
+            bird
+            for bird in daily
+            if isinstance(bird, dict)
+            and bird.get("is_new_this_year")
+            and bird.get("scientific_name")
+        ]
+        return latest_species(new_this_year)

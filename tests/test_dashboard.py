@@ -59,7 +59,7 @@ class DashboardTests(unittest.TestCase):
         environment.filters["as_timestamp"] = lambda value: value
         return environment.from_string(template).render(
             has_value=lambda _: available,
-            state_attr=lambda *_: birds,
+            state_attr=lambda *_: birds if available else None,
             today_at=lambda time: time,
             as_timestamp=lambda time: time,
             as_datetime=lambda time: time,
@@ -80,16 +80,23 @@ class DashboardTests(unittest.TestCase):
 
     def test_empty_and_offline(self):
         for name, template in templates.items():
-            if name == "OVERVIEW_TEMPLATE":
+            if name in ("OVERVIEW_TEMPLATE", "MIGRATION_TEMPLATE"):
                 continue
             self.assertNotIn("| :--", self.render(template, []))
             self.assertIn("Waiting for BirdNET-Go", self.render(template, [], False))
+
+    def test_migration_template_states(self):
+        empty = self.render(templates["MIGRATION_TEMPLATE"], [])
+        self.assertIn("No notable arrivals", empty)
+        unavailable = self.render(templates["MIGRATION_TEMPLATE"], [], False)
+        self.assertIn("enhanced database", unavailable)
 
     def test_default_dashboard_uses_name_and_count_states(self):
         config = namespace["_default_config"](
             "sensor.daily", "sensor.summary", "sensor.interest",
             "http://birdnet.local", "sensor.latest", "sensor.detections",
-            "camera.latest_image",
+            "camera.latest_image", "sensor.foy", "camera.foy_image",
+            "sensor.history", "sensor.migration",
         )
         view = config["views"][0]
         self.assertEqual(view["max_columns"], 1)
@@ -100,6 +107,22 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(hero["entity"], "sensor.latest")
         self.assertEqual(hero["camera_image"], "camera.latest_image")
         self.assertGreaterEqual(hero["grid_options"]["rows"], 5)
+        foy_picture = sections[0]["cards"][-1]
+        self.assertEqual(foy_picture["type"], "picture-entity")
+        self.assertEqual(foy_picture["entity"], "sensor.foy")
+        self.assertEqual(foy_picture["camera_image"], "camera.foy_image")
+        titles = [section["title"] for section in sections]
+        self.assertIn("Trends", titles)
+        self.assertIn("First of year", titles)
+        trend = sections[titles.index("Trends")]["cards"]
+        self.assertEqual([card["entity"] for card in trend], [
+            "sensor.history", "sensor.migration",
+        ])
+        foy_section = sections[titles.index("First of year")]["cards"]
+        self.assertEqual(foy_section[0]["entity"], "sensor.foy")
+        self.assertIn("__HISTORY__", templates["HISTORY_TEMPLATE"])
+        self.assertIn("__MIGRATION__", templates["MIGRATION_TEMPLATE"])
+        self.assertIn("__DAILY__", templates["FIRST_OF_YEAR_TEMPLATE"])
         tiles = [card for card in sections[0]["cards"] if card["type"] == "tile"]
         self.assertEqual([card["entity"] for card in tiles], [
             "sensor.daily", "sensor.detections", "sensor.latest", "sensor.interest",
@@ -113,7 +136,8 @@ class DashboardTests(unittest.TestCase):
             )
         )
         for section in sections[1:]:
-            self.assertEqual(section["cards"][0]["grid_options"]["columns"], 12)
+            for card in section["cards"]:
+                self.assertEqual(card["grid_options"]["columns"], 12)
 
 
 if __name__ == "__main__":

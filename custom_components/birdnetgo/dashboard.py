@@ -123,6 +123,58 @@ No recent bird data available.
 Waiting for BirdNET-Go…
 {% endif %}"""
 
+FIRST_OF_YEAR_TEMPLATE = """{% if has_value('__DAILY__') -%}
+{% set species_data = state_attr('__DAILY__', 'species_list') or [] -%}
+{% set foy = species_data | selectattr('is_new_this_year') | list -%}
+{% if foy | count > 0 -%}
+| Species | First heard |
+| :-- | --: |
+{% for bird in foy | sort(attribute='first_heard') -%}
+{% set time = bird.get('first_heard', '1970-01-01 00:00:00') -%}
+{% set name = bird.get('common_name', 'Unknown') -%}
+{% set species_code = bird.get('species_code', '') -%}
+{% set ebird_url = 'https://ebird.org/species/' ~ species_code -%}
+{% if species_code | length >= 1 and species_code | length <= 7 %}[{{ name }}]({{ ebird_url }}){% else %}{{ name }}{% endif %} | {{ as_datetime(time) | as_timestamp | timestamp_custom('%H:%M', true) }}
+{% endfor %}
+{% else -%}
+No new species for the year list yet today.
+{% endif -%}
+{% else -%}
+Waiting for BirdNET-Go…
+{% endif %}"""
+
+HISTORY_TEMPLATE = """{% if has_value('__HISTORY__') -%}
+{% set counts = state_attr('__HISTORY__', 'daily_counts') or {} -%}
+{% set spark = state_attr('__HISTORY__', 'sparkline') -%}
+{% if counts | count > 1 -%}
+**{{ counts.values() | sum }} detections** over the last {{ counts | count }} days · best day **{{ counts.values() | max }}**
+{% if spark %}
+{{ spark }}
+{% endif -%}
+{% elif counts | count == 1 -%}
+Only one day of history so far — **{{ counts.values() | sum }} detections**.
+{% else -%}
+No detection history yet.
+{% endif -%}
+{% else -%}
+Waiting for BirdNET-Go…
+{% endif %}"""
+
+MIGRATION_TEMPLATE = """{% set arrivals = state_attr('__MIGRATION__', 'new_arrivals') -%}
+{% set quiet = state_attr('__MIGRATION__', 'gone_quiet') -%}
+{% if arrivals is none and quiet is none -%}
+Migration insights need a newer BirdNET-Go with the enhanced database.
+{% elif (arrivals or []) | count == 0 and (quiet or []) | count == 0 -%}
+No notable arrivals or departures lately.
+{% else -%}
+{% if (arrivals or []) | count > 0 -%}
+**New arrivals:** {{ arrivals | join(', ') }}
+{% endif -%}
+{% if (quiet or []) | count > 0 -%}
+**Gone quiet:** {% for bird in quiet %}{{ bird.get('common_name') }} ({{ bird.get('days_since') }} days){% if not loop.last %}, {% endif %}{% endfor %}
+{% endif -%}
+{% endif %}"""
+
 INTEREST_TEMPLATE = """{% if has_value('__INTEREST__') -%}
 {% set species_data = state_attr('__INTEREST__', 'species_list') or [] -%}
 {% if species_data | count > 0 -%}
@@ -144,16 +196,11 @@ Waiting for BirdNET-Go…
 {% endif %}"""
 
 
-def _render(
-    content: str, daily: str, species: str, interest: str, base_url: str
-) -> str:
+def _render(content: str, replacements: dict[str, str]) -> str:
     """Fill in entity and URL placeholders in a card template."""
-    return (
-        content.replace("__DAILY__", daily)
-        .replace("__SPECIES__", species)
-        .replace("__INTEREST__", interest)
-        .replace("__BASE_URL__", base_url)
-    )
+    for placeholder, value in replacements.items():
+        content = content.replace(placeholder, value)
+    return content
 
 
 def _tile(entity: str, name: str, icon: str) -> dict[str, Any]:
@@ -176,43 +223,29 @@ def _default_config(
     latest_bird_entity: str,
     detections_entity: str,
     camera_entity: str,
+    foy_entity: str,
+    foy_camera_entity: str,
+    history_entity: str,
+    migration_entity: str,
 ) -> dict[str, Any]:
     """Build the default dashboard configuration."""
-    overview = _render(
-        OVERVIEW_TEMPLATE,
-        daily_entity,
-        species_entity,
-        interest_entity,
-        base_url,
-    )
-    daily = _render(
-        DAILY_TEMPLATE,
-        daily_entity,
-        species_entity,
-        interest_entity,
-        base_url,
-    )
-    latest = _render(
-        LATEST_TEMPLATE,
-        daily_entity,
-        species_entity,
-        interest_entity,
-        base_url,
-    )
-    brand_new = _render(
-        BRAND_NEW_TEMPLATE,
-        daily_entity,
-        species_entity,
-        interest_entity,
-        base_url,
-    )
-    interest = _render(
-        INTEREST_TEMPLATE,
-        daily_entity,
-        species_entity,
-        interest_entity,
-        base_url,
-    )
+    replacements = {
+        "__DAILY__": daily_entity,
+        "__SPECIES__": species_entity,
+        "__INTEREST__": interest_entity,
+        "__BASE_URL__": base_url,
+        "__FOY__": foy_entity,
+        "__HISTORY__": history_entity,
+        "__MIGRATION__": migration_entity,
+    }
+    overview = _render(OVERVIEW_TEMPLATE, replacements)
+    daily = _render(DAILY_TEMPLATE, replacements)
+    latest = _render(LATEST_TEMPLATE, replacements)
+    brand_new = _render(BRAND_NEW_TEMPLATE, replacements)
+    foy = _render(FIRST_OF_YEAR_TEMPLATE, replacements)
+    history = _render(HISTORY_TEMPLATE, replacements)
+    migration = _render(MIGRATION_TEMPLATE, replacements)
+    interest = _render(INTEREST_TEMPLATE, replacements)
 
     return {
         "version": 1,
@@ -256,6 +289,49 @@ def _default_config(
                                 "Birds of interest",
                                 "mdi:heart-outline",
                             ),
+                            {
+                                "type": "picture-entity",
+                                "entity": foy_entity,
+                                "camera_image": foy_camera_entity,
+                                "camera_view": "auto",
+                                "show_name": True,
+                                "show_state": True,
+                                "name": "First of year",
+                                "grid_options": {"columns": 12, "rows": 4},
+                            },
+                        ],
+                    },
+                    {
+                        "type": "grid",
+                        "title": "Trends",
+                        "column_span": 1,
+                        "cards": [
+                            {
+                                "type": "markdown",
+                                "entity": history_entity,
+                                "content": history,
+                                "grid_options": {"columns": 12},
+                            },
+                            {
+                                "type": "markdown",
+                                "entity": migration_entity,
+                                "content": migration,
+                                "grid_options": {"columns": 12},
+                            },
+                        ],
+                    },
+                    {
+                        "type": "grid",
+                        "title": "First of year",
+                        "column_span": 1,
+                        "cards": [
+                            {
+                                "type": "markdown",
+                                "entity": foy_entity,
+                                "content": foy,
+                                "show_header_toggle": False,
+                                "grid_options": {"columns": 12},
+                            }
                         ],
                     },
                     {
@@ -364,6 +440,12 @@ def _resolve_entities(hass: HomeAssistant, entry_id: str) -> tuple[str, ...]:
         entity_id("sensor", "latest_bird", "sensor.birdnet_latest_bird"),
         entity_id("sensor", "detections_today", "sensor.birdnet_detections_today"),
         entity_id("camera", "latest_bird_image", "camera.birdnet_latest_bird_image"),
+        entity_id("sensor", "first_of_year", "sensor.birdnet_first_of_year"),
+        entity_id(
+            "camera", "first_of_year_image", "camera.birdnet_first_of_year_image"
+        ),
+        entity_id("sensor", "detections_history", "sensor.birdnet_detection_history"),
+        entity_id("sensor", "migration", "sensor.birdnet_migration"),
     )
 
 

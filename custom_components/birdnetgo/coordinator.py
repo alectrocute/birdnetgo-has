@@ -26,11 +26,14 @@ from .const import (
     CONF_NOTIFY_SERVICE,
     CONF_RARE_THRESHOLD_DAYS,
     CONF_SCAN_INTERVAL,
+    DAILY_HISTORY_DAYS,
+    DAILY_HISTORY_ENDPOINT,
     DAILY_SUMMARY_ENDPOINT,
     DEFAULT_COOLDOWN_MINUTES,
     DEFAULT_RARE_THRESHOLD_DAYS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    MIGRATION_ENDPOINT,
     NOTIFICATION_CHANNEL,
     NOTIFICATION_GROUP,
     NOTIFICATION_ICON,
@@ -49,6 +52,12 @@ class BirdNETGoData:
 
     daily_species: list[dict[str, Any]] = field(default_factory=list)
     summary_species: list[dict[str, Any]] = field(default_factory=list)
+    # Recent per-day detection counts, oldest first:
+    # [{"date": "2026-09-01", "count": 123}, ...]
+    daily_history: list[dict[str, Any]] = field(default_factory=list)
+    # Migration insights; empty when the endpoint is unavailable (older
+    # BirdNET-Go builds without the insights API).
+    migration: dict[str, Any] = field(default_factory=dict)
 
 
 def _parse_timestamp(raw: Any) -> datetime | None:
@@ -145,6 +154,9 @@ class BirdNETGoCoordinator(DataUpdateCoordinator[BirdNETGoData]):
 
         self._previous_summary: list[dict[str, Any]] | None = None
         self._last_detection_notify: datetime | None = None
+        # Species codes already alerted as rare today, so the server-driven
+        # gap detection does not re-alert on every refresh.
+        self._rare_notified: dict[str, datetime.date] = {}
 
         super().__init__(
             hass,
@@ -157,8 +169,15 @@ class BirdNETGoCoordinator(DataUpdateCoordinator[BirdNETGoData]):
         """Fetch data from the BirdNET-Go API and process notifications."""
         daily = await self._fetch(DAILY_SUMMARY_ENDPOINT)
         summary = await self._fetch(SPECIES_SUMMARY_ENDPOINT)
-        data = BirdNETGoData(daily_species=daily, summary_species=summary)
-        self._process_notifications(summary)
+        history = await self._fetch_daily_history()
+        migration = await self._fetch_migration()
+        data = BirdNETGoData(
+            daily_species=daily,
+            summary_species=summary,
+            daily_history=history,
+            migration=migration,
+        )
+        self._process_notifications(summary, daily)
         return data
 
     async def _fetch(self, endpoint: str) -> list[dict[str, Any]]:
@@ -178,11 +197,66 @@ class BirdNETGoCoordinator(DataUpdateCoordinator[BirdNETGoData]):
             raise UpdateFailed(f"Unexpected response from {url}, expected a list")
         return data
 
+    async def _fetch_daily_history(self) -> list[dict[str, Any]]:
+        """Fetch the per-day detection counts for the last month."""
+        end = dt_util.now().date()
+        start = end - timedelta(days=DAILY_HISTORY_DAYS - 1)
+        url = (
+            f"{self.base_url}{DAILY_HISTORY_ENDPOINT}"
+            f"?start_date={start.isoformat()}&end_date={end.isoformat()}"
+        )
+        try:
+            async with asyncio.timeout(REQUEST_TIMEOUT):
+                response = await self.session.get(url)
+                response.raise_for_status()
+                payload: Any = await response.json()
+        except (TimeoutError, ClientError) as err:
+            _LOGGER.warning("Could not load detection history: %s", err)
+            return []
+        except ValueError as err:
+            _LOGGER.warning("Detection history was not valid JSON: %s", err)
+            return []
+
+        rows = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            return []
+        return [
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and isinstance(row.get("date"), str)
+            and isinstance(row.get("count"), int)
+        ]
+
+    async def _fetch_migration(self) -> dict[str, Any]:
+        """Fetch migration insights, tolerating their absence.
+
+        The insights API only exists on BirdNET-Go builds with the enhanced
+        (v2) database, so a 404 or any other failure simply leaves the data
+        empty instead of failing the refresh.
+        """
+        url = f"{self.base_url}{MIGRATION_ENDPOINT}"
+        try:
+            async with asyncio.timeout(REQUEST_TIMEOUT):
+                response = await self.session.get(url)
+                if response.status == 404:
+                    return {}
+                response.raise_for_status()
+                payload: Any = await response.json()
+        except (TimeoutError, ClientError, ValueError) as err:
+            _LOGGER.debug("Migration insights unavailable: %s", err)
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
     async def async_clear_cooldown(self) -> None:
         """Clear the notification cooldown (Reset action on notifications)."""
         self._last_detection_notify = None
 
-    def _process_notifications(self, current: list[dict[str, Any]]) -> None:
+    def _process_notifications(
+        self,
+        current: list[dict[str, Any]],
+        daily: list[dict[str, Any]] | None = None,
+    ) -> None:
         """Diff the current species summary against the previous one."""
         previous = self._previous_summary
         self._previous_summary = list(current)
@@ -204,7 +278,8 @@ class BirdNETGoCoordinator(DataUpdateCoordinator[BirdNETGoData]):
         }
 
         new_species: list[dict[str, Any]] = []
-        rare_species: list[tuple[dict[str, Any], int, datetime]] = []
+        rare_species: list[tuple[dict[str, Any], int, datetime | None]] = []
+        diff_rare: list[tuple[dict[str, Any], int, datetime | None]] = []
         detections: list[dict[str, Any]] = []
 
         for bird in current:
@@ -231,7 +306,31 @@ class BirdNETGoCoordinator(DataUpdateCoordinator[BirdNETGoData]):
             detections.append(bird)
             gap_days = (last_heard - old_last_heard).days
             if gap_days > self.rare_threshold_days:
-                rare_species.append((bird, gap_days, old_last_heard))
+                diff_rare.append((bird, gap_days, old_last_heard))
+
+        # Prefer the server-computed absence length from today's summary: it
+        # counts the days since the previous detection, so returns that happen
+        # while Home Assistant was offline or restarting are not missed. The
+        # diff-based estimate above is only a fallback for older servers that
+        # do not provide the field.
+        today = dt_util.now().date()
+        for bird in daily or []:
+            if not isinstance(bird, dict):
+                continue
+            raw_gap = bird.get("days_since_last_seen")
+            if raw_gap is None:
+                continue
+            gap_days = int(raw_gap)
+            code = str(bird.get("species_code") or "")
+            if gap_days <= self.rare_threshold_days:
+                continue
+            # Only alert once per species per day.
+            if self._rare_notified.get(code) == today:
+                continue
+            self._rare_notified[code] = today
+            rare_species.append((bird, gap_days, None))
+        if not rare_species:
+            rare_species = diff_rare
 
         if not self.notify_detections:
             detections = []
@@ -272,8 +371,12 @@ class BirdNETGoCoordinator(DataUpdateCoordinator[BirdNETGoData]):
                 title=f"🐦 {bird.get('common_name')} is back ({gap_days} days)!",
                 message=(
                     f"{bird.get('common_name')} has been heard again!\n"
-                    f"Previously heard: {previously_heard.strftime('%b %d, %Y')}\n"
-                    f"That's a gap of {gap_days} days!"
+                    + (
+                        f"Previously heard: {previously_heard.strftime('%b %d, %Y')}\n"
+                        if previously_heard
+                        else ""
+                    )
+                    + f"That's a gap of {gap_days} days!"
                 ),
             )
 
