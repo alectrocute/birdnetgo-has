@@ -7,12 +7,13 @@
         "data": {
           "host": "Host or address",
           "port": "Port",
-          "ssl": "Use HTTPS",
+          "ssl": "Use HTTPS for the API connection",
           "frontend_url": "Browser-facing frontend URL (optional)",
           "scan_interval": "Update interval"
         },
         "data_description": {
           "host": "For example, 192.168.1.50 or birdnet-go.local",
+          "ssl": "Applies to the host and port above, which Home Assistant uses to poll the analytics API. The optional frontend URL is separate and includes its own http:// or https:// prefix.",
           "frontend_url": "Useful when Home Assistant and browsers reach BirdNET-Go through different addresses",
           "scan_interval": "How often Home Assistant checks for new detections"
         }
