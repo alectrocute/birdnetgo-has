@@ -252,6 +252,5 @@ custom_fields:
 
 - The markdown cards on the built-in dashboard read the live sensors, so they
   reflect real-time state (even when BirdNET-Go is down).
-- The `species_list` attributes can get large. You may want to exclude the
-  BirdNET-Go sensors from the recorder (see the
-  [README](../README.md#recommended-exclude-sensors-from-the-recorder)).
+- The large `species_list` attributes are excluded from the recorder
+  automatically, so they won't bloat your database.

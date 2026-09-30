@@ -47,6 +47,6 @@ The dashboard is created automatically and can be edited. To apply dashboard lay
 
 The analytics API returns species summaries, not individual detection events. The latest bird is the species with the newest `last_heard` timestamp; polls can miss intermediate observations. Notification alerts are optional and may arrive up to one polling interval late. For per-detection camera and confidence data, see [webhook automations](docs/advanced-automations.md).
 
-Large `species_list` attributes can generate substantial recorder history. If needed, exclude the summary sensors from recorder; the compact sensors above can remain in history. See [custom dashboard examples](docs/advanced-dashboards.md).
+The summary sensors' large `species_list` attributes are already excluded from the recorder, so they won't bloat your database. Excluding the sensors entirely is optional and only needed if you also don't want their state changes in history. See [custom dashboard examples](docs/advanced-dashboards.md).
 
 Based on [Kyle Niewiada's BirdNET-Go guide](https://www.kyleniewiada.org/blog/2025/05/backyard-bird-tracking-with-ai). [MIT license](LICENSE).

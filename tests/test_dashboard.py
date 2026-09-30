@@ -162,8 +162,10 @@ class DashboardTests(unittest.TestCase):
                 "sparkline": "▃▄█",
             },
         )
+        self.assertIn("▃▄█", output)
         self.assertIn("**12 detections** in 2 days · best day **7**", output)
-        self.assertNotIn("▃▄█", output)
+        non_empty = [line for line in output.splitlines() if line.strip()]
+        self.assertEqual(len(non_empty), 2)
 
     def test_first_of_year_handles_missing_flags_and_empty_states(self):
         template = templates["FIRST_OF_YEAR_TEMPLATE"]
@@ -199,11 +201,11 @@ class DashboardTests(unittest.TestCase):
             "sensor.migration",
         )
         view = config["views"][0]
-        self.assertEqual(view["max_columns"], 2)
+        self.assertEqual(view["max_columns"], 3)
         sections = view["sections"]
         self.assertEqual(
             [section["column_span"] for section in sections],
-            [2, 2, 2, 1, 1, 2],
+            [3, 3, 1, 1, 1, 3],
         )
         hero = sections[0]["cards"][0]
         self.assertEqual(hero["type"], "picture-entity")
@@ -240,7 +242,7 @@ class DashboardTests(unittest.TestCase):
         )
         self.assertTrue(all(card["grid_options"]["columns"] == 4 for card in trend[:3]))
         self.assertEqual(
-            [card["grid_options"]["columns"] for card in trend[3:]], [12, 6, 6]
+            [card["grid_options"]["columns"] for card in trend[3:]], [6, 6, 6]
         )
         foy_tile = trend[2]
         self.assertEqual(foy_tile["name"], "First of year")
@@ -282,9 +284,11 @@ class DashboardTests(unittest.TestCase):
                 for card in section["cards"]
             )
         )
-        for section in sections[2:]:
+        for section in sections[2:5]:
             for card in section["cards"]:
                 self.assertEqual(card["grid_options"]["columns"], 12)
+        interest_card = sections[5]["cards"][0]
+        self.assertEqual(interest_card["grid_options"]["columns"], 6)
 
 
 if __name__ == "__main__":

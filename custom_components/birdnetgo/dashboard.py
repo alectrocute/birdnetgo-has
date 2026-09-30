@@ -138,6 +138,8 @@ Waiting for BirdNET-Go…
 HISTORY_TEMPLATE = """{% if has_value('__HISTORY__') -%}
 {% set counts = state_attr('__HISTORY__', 'daily_counts') or {} -%}
 {% if counts | count > 1 -%}
+{{ state_attr('__HISTORY__', 'sparkline') }}
+
 **{{ counts.values() | sum }} detections** in {{ counts | count }} days · best day **{{ counts.values() | max }}**
 {% elif counts | count == 1 -%}
 **{{ counts.values() | sum }} detections** · one day of history so far.
@@ -261,12 +263,12 @@ def _default_config(
                 "icon": DASHBOARD_ICON,
                 "path": "birds",
                 "type": "sections",
-                "max_columns": 2,
+                "max_columns": 3,
                 "sections": [
                     {
                         "type": "grid",
                         "title": "At a glance",
-                        "column_span": 2,
+                        "column_span": 3,
                         "cards": [
                             {
                                 "type": "picture-entity",
@@ -306,7 +308,7 @@ def _default_config(
                     {
                         "type": "grid",
                         "title": "Trends",
-                        "column_span": 2,
+                        "column_span": 3,
                         "cards": [
                             _tile(
                                 history_entity,
@@ -330,7 +332,7 @@ def _default_config(
                                 "type": "markdown",
                                 "entity": history_entity,
                                 "content": history,
-                                "grid_options": {"columns": 12},
+                                "grid_options": {"columns": 6},
                             },
                             {
                                 "type": "markdown",
@@ -363,7 +365,7 @@ def _default_config(
                     {
                         "type": "grid",
                         "title": "Today's visitors",
-                        "column_span": 2,
+                        "column_span": 1,
                         "cards": [
                             {
                                 "type": "markdown",
@@ -405,14 +407,14 @@ def _default_config(
                     {
                         "type": "grid",
                         "title": "Birds of interest",
-                        "column_span": 2,
+                        "column_span": 3,
                         "cards": [
                             {
                                 "type": "markdown",
                                 "entity": interest_entity,
                                 "content": interest,
                                 "show_header_toggle": False,
-                                "grid_options": {"columns": 12},
+                                "grid_options": {"columns": 6},
                             }
                         ],
                     },
