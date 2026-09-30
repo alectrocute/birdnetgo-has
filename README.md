@@ -16,6 +16,8 @@ This is a read-only **stats device**: it polls BirdNET-Go's analytics API and ne
 
 ## Install
 
+[![Open your Home Assistant instance and add the alectrocute repository.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Falectrocute%2Fbirdnetgo-hacs)
+
 Add this repository as a HACS custom repository (category **Integration**), install BirdNET-Go, and restart Home Assistant. Or copy `custom_components/birdnetgo/` to your Home Assistant `config/custom_components/` directory and restart.
 
 In **Settings > Devices & services > Add integration**, select BirdNET-Go and enter its address. The default polling interval is 60 seconds. Use **Configure** later to set birds of interest, notification service and alerts, or a separate browser-facing URL.
