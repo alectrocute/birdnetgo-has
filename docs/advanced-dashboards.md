@@ -30,9 +30,9 @@ If no URL is available (or a photo 404s), a 🐦 placeholder is shown instead.
 
 ```yaml
 type: custom:button-card
-entity: sensor.birdnet_species_summary
+entity: sensor.birdnet_go_birdnet_species_summary
 triggers_update:
-  - sensor.birdnet_species_summary
+  - sensor.birdnet_go_birdnet_species_summary
 variables:
   birdnet_frontend_url: ""
 show_icon: false
@@ -53,12 +53,12 @@ styles:
 custom_fields:
   content: |
     [[[
-      const speciesData = states['sensor.birdnet_species_summary']?.attributes?.species_list;
+      const speciesData = states['sensor.birdnet_go_birdnet_species_summary']?.attributes?.species_list;
       if (!speciesData || speciesData.length === 0) {
         return '<p style="color:var(--secondary-text-color);">No recent bird data available.</p>';
       }
 
-      const attrs = states['sensor.birdnet_species_summary']?.attributes || {};
+      const attrs = states['sensor.birdnet_go_birdnet_species_summary']?.attributes || {};
       const baseUrl = (variables.birdnet_frontend_url || attrs.frontend_url || attrs.base_url || '').replace(/\/+$/, '');
 
       const sorted = [...speciesData].sort((a, b) => {
@@ -140,9 +140,9 @@ custom_fields:
 
 ```yaml
 type: custom:button-card
-entity: sensor.birdnet_daily_summary
+entity: sensor.birdnet_go_birdnet_daily_summary
 triggers_update:
-  - sensor.birdnet_daily_summary
+  - sensor.birdnet_go_birdnet_daily_summary
 show_icon: false
 show_name: false
 show_state: false
@@ -160,7 +160,7 @@ styles:
 custom_fields:
   content: |
     [[[
-      const speciesData = states['sensor.birdnet_daily_summary']?.attributes?.species_list;
+      const speciesData = states['sensor.birdnet_go_birdnet_daily_summary']?.attributes?.species_list;
       if (!speciesData || speciesData.length === 0) {
         return '<p style="color:var(--secondary-text-color);">No bird species data available or list is empty.</p>';
       }
