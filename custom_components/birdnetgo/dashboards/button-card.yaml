@@ -1,48 +1,12 @@
-# Advanced: custom dashboards
-
-The integration creates a **Birds** dashboard in your sidebar automatically
-(see the [README](../README.md)), and it is a normal Home Assistant dashboard —
-you can edit, rearrange, or delete its cards in the UI. If you break it, run
-**Configure** on the BirdNET-Go integration and enable *Reset the Birds
-dashboard to the default layout*.
-
-## Automatic button-card layout
-
-If you have the [button-card](https://github.com/custom-cards/button-card)
-plugin installed (HACS > Frontend > button-card), the integration builds a
-polished layout for you automatically:
-
-- A large latest-bird hero with the live camera snapshot
-- Quick tiles for first bird today, species, detections, and history
-- A detection-history graph and shortcuts to your BirdNET-Go instance
-- **Today's species table** with photos served straight from BirdNET-Go,
-  links to eBird, and per-species activity sparklines
-
-No configuration is needed — the vanilla layout is used whenever button-card
-is not detected, and both layouts can be re-applied later with the *Restore
-the default layout* option. The two layouts live side by side in the
-integration's
-[`dashboards/` folder](../custom_components/birdnetgo/dashboards/)
-(`button-card.yaml` and `default.yaml`) and can be diffed or edited there.
-
-## Manual setup
-
-Prefer to paste things yourself? Both variants below expect the integration's
-default entity ids; adjust them if yours differ. The thumbnail URL resolves
-in this order:
-
-1. The card's `birdnet_frontend_url` variable (per-card override)
-2. The integration's **Frontend URL** option
-3. The integration's BirdNET-Go base URL
-
-If no URL is available (or a photo 404s), a 🐦 placeholder is shown instead.
-
-### Full dashboard
-
-Create a new (empty) dashboard, open **⋮ → Raw editor**, and replace its
-contents with:
-
-```yaml
+# The polished Birds dashboard, powered by the community button-card plugin.
+#
+# The integration installs this layout automatically when button-card is
+# detected; the vanilla layout in default.yaml is used otherwise.
+#
+# Entity ids and URLs are written as __PLACEHOLDER__ tokens; the integration
+# fills them in when it creates the dashboard, so this file stays readable
+# and diffable next to default.yaml.
+version: 1
 views:
   - title: Birds
     icon: mdi:bird
@@ -54,25 +18,25 @@ views:
         show_name: false
         show_state: true
         show_icon: true
-        entity: sensor.birdnet_lifetime_species
+        entity: __LIFETIME__
       - type: entity
         show_name: false
         show_state: true
         show_icon: true
-        entity: sensor.birdnet_birds_of_interest
+        entity: __INTEREST__
       - type: entity
         show_name: false
         show_state: true
         show_icon: true
-        entity: sensor.birdnet_species_summary
+        entity: __SPECIES__
     header: {}
     sections:
       - type: grid
         column_span: 3
         cards:
           - type: picture-entity
-            entity: sensor.birdnet_latest_bird
-            camera_image: camera.birdnet_latest_bird_image
+            entity: __LATEST_BIRD__
+            camera_image: __CAMERA__
             camera_view: auto
             fit_mode: cover
             show_state: true
@@ -81,23 +45,23 @@ views:
               columns: 9
               rows: 4
           - type: entity
-            entity: sensor.birdnet_first_bird_today
+            entity: __FIRST_BIRD__
             state_color: false
             name: Today's First Heard
             grid_options:
               columns: 6
               rows: 2
           - type: entity
-            entity: sensor.birdnet_daily_summary
+            entity: __DAILY__
             state_color: false
             name: Today's Species
             icon: mdi:tally-mark-5
           - type: entity
-            entity: sensor.birdnet_detections_today
+            entity: __DETECTIONS__
             state_color: false
             name: Today's Detections
           - type: entity
-            entity: sensor.birdnet_detections_history
+            entity: __HISTORY__
             state_color: false
             name: Yesterday's Detections
             icon: mdi:step-backward-2
@@ -111,13 +75,13 @@ views:
             show_icon: true
             tap_action:
               action: url
-              url_path: http://birdnet.lan:8080
+              url_path: __BASE_URL__
             grid_options:
               columns: 3
               rows: 2
           - type: history-graph
             entities:
-              - entity: sensor.birdnet_latest_bird
+              - entity: __LATEST_BIRD__
                 name: Detections
             logarithmic_scale: false
             expand_legend: false
@@ -127,10 +91,17 @@ views:
       - type: grid
         column_span: 3
         cards:
+          # Today's species table: photos straight from BirdNET-Go, sortable
+          # by last-heard time, with per-species activity sparklines.
+          # The thumbnail URL resolves in this order:
+          #   1. the card's birdnet_frontend_url variable (per-card override)
+          #   2. the integration's Frontend URL option
+          #   3. the integration's BirdNET-Go base URL
+          # If no URL is available (or a photo 404s), a 🐦 placeholder is shown.
           - type: custom:button-card
-            entity: sensor.birdnet_daily_summary
+            entity: __DAILY__
             triggers_update:
-              - sensor.birdnet_daily_summary
+              - __DAILY__
             show_icon: false
             show_name: false
             show_state: false
@@ -586,35 +557,3 @@ views:
 
                   return tableHtml;
                 ]]]
-```
-
-### Just the species table card
-
-Only want the photo table on an existing dashboard? Add a **Manual** card
-and paste the `custom:button-card` block from the full dashboard above — or
-use this compact variant with the per-card URL override:
-
-```yaml
-type: custom:button-card
-entity: sensor.birdnet_daily_summary
-triggers_update:
-  - sensor.birdnet_daily_summary
-variables:
-  birdnet_frontend_url: ""
-show_icon: false
-show_name: false
-show_state: false
-grid_options:
-  columns: 12
-```
-
-…and paste the `styles:` and `custom_fields:` blocks from the full dashboard
-into it. Setting `birdnet_frontend_url` here overrides the URL the
-integration would otherwise use.
-
-## Notes
-
-- The markdown cards on the built-in dashboard read the live sensors, so they
-  reflect real-time state (even when BirdNET-Go is down).
-- The large `species_list` attributes are excluded from the recorder
-  automatically, so they won't bloat your database.

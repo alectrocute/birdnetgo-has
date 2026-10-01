@@ -43,7 +43,7 @@ The name sensors also expose `last_heard` and `species_code` attributes (the lat
 
 The migration sensor and rare-return alerts use BirdNET-Go's insights API, which requires BirdNET-Go's enhanced database (v2). On older builds the sensor reports unavailable and alerts fall back to comparing consecutive polls. Rare-return alerts also use the server-computed absence length when available, so returns that happen while Home Assistant restarts are not missed.
 
-The dashboard is created automatically and can be edited. To apply dashboard layout changes after an update, use **Configure > Dashboard > Restore the default layout** (this overwrites your edits).
+The dashboard is created automatically and can be edited. If the [button-card](https://github.com/custom-cards/button-card) plugin (HACS) is installed, a polished layout with species photos and activity sparklines is used automatically; otherwise a vanilla layout built from core cards is created. To apply dashboard layout changes after an update, use **Configure > Dashboard > Restore the default layout** (this overwrites your edits). See [custom dashboards](docs/advanced-dashboards.md) for details.
 
 The analytics API returns species summaries, not individual detection events. The latest bird is the species with the newest `last_heard` timestamp; polls can miss intermediate observations. Notification alerts are optional and may arrive up to one polling interval late. For per-detection camera and confidence data, see [webhook automations](docs/advanced-automations.md).
 

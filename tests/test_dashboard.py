@@ -1,44 +1,115 @@
-"""Regression checks for generated dashboard templates without HA installed."""
+"""Regression checks for the bundled dashboard layouts, without HA installed."""
 
 import ast
+import asyncio
 import unittest
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import yaml
 from jinja2 import Environment, StrictUndefined
 
 SOURCE = (
     Path(__file__).resolve().parents[1] / "custom_components/birdnetgo/dashboard.py"
 )
+DASHBOARDS_DIR = SOURCE.parent / "dashboards"
+
 module = ast.parse(SOURCE.read_text())
-templates = {
-    target.id: ast.literal_eval(node.value)
-    for node in module.body
-    if isinstance(node, ast.Assign)
-    for target in node.targets
-    if isinstance(target, ast.Name) and target.id.endswith("_TEMPLATE")
-}
 functions = ast.Module(
     body=[
-        node
-        for node in module.body
-        if isinstance(node, ast.FunctionDef)
-        and node.name in ("_render", "_tile", "_default_config")
+        ast.ImportFrom(
+            module="__future__", names=[ast.alias(name="annotations")], level=0
+        ),
+        *(
+            node
+            for node in module.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name
+            in ("_render", "_load_layout", "_lovelace_data", "_has_button_card")
+        ),
     ],
     type_ignores=[],
 )
-namespace = {
-    **templates,
+namespace: dict[str, Any] = {
     "Any": Any,
-    "DASHBOARD_TITLE": "Birds",
-    "DASHBOARD_ICON": "mdi:bird",
-    "FIRST_OF_YEAR_EMPTY_STATE": "None today",
+    "Path": Path,
+    "suppress": suppress,
+    "yaml": yaml,
+    "DASHBOARDS_DIR": DASHBOARDS_DIR,
 }
+ast.fix_missing_locations(functions)
 exec(  # noqa: S102
     compile(functions, str(SOURCE), "exec"),
     namespace,
 )
+
+ENTITIES = {
+    "__DAILY__": "sensor.daily",
+    "__SPECIES__": "sensor.summary",
+    "__INTEREST__": "sensor.interest",
+    "__LATEST_BIRD__": "sensor.latest",
+    "__DETECTIONS__": "sensor.detections",
+    "__LIFETIME__": "sensor.lifetime",
+    "__CAMERA__": "camera.latest_image",
+    "__FOY__": "sensor.foy",
+    "__HISTORY__": "sensor.history",
+    "__MIGRATION__": "sensor.migration",
+    "__FIRST_BIRD__": "sensor.first_bird",
+    "__BASE_URL__": "http://birdnet.local",
+}
+
+render_layout = namespace["_render"]
+DEFAULT_CONFIG = render_layout(namespace["_load_layout"]("default"), ENTITIES)
+BUTTON_CONFIG = render_layout(namespace["_load_layout"]("button-card"), ENTITIES)
+
+
+def _templates_by_section(config: dict[str, Any]) -> dict[str, list[str]]:
+    """Return the markdown/Jinja contents of each titled section."""
+    result: dict[str, list[str]] = {}
+    for section in config["views"][0]["sections"]:
+        contents = [
+            card["card"]["content"]
+            if card["type"] == "conditional"
+            else card["content"]
+            for card in section["cards"]
+            if card["type"] in ("markdown", "conditional")
+        ]
+        if contents:
+            result[section["title"]] = contents
+    return result
+
+
+_templates = _templates_by_section(DEFAULT_CONFIG)
+DAILY_TEMPLATE = _templates["Today's visitors"][0]
+LATEST_TEMPLATE = _templates["Latest detections"][0]
+BRAND_NEW_TEMPLATE = _templates["New species"][0]
+INTEREST_TEMPLATE = _templates["Birds of interest"][0]
+HISTORY_TEMPLATE, MIGRATION_TEMPLATE, FIRST_OF_YEAR_TEMPLATE = _templates["Trends"]
+templates = {
+    "DAILY_TEMPLATE": DAILY_TEMPLATE,
+    "LATEST_TEMPLATE": LATEST_TEMPLATE,
+    "BRAND_NEW_TEMPLATE": BRAND_NEW_TEMPLATE,
+    "INTEREST_TEMPLATE": INTEREST_TEMPLATE,
+    "HISTORY_TEMPLATE": HISTORY_TEMPLATE,
+    "MIGRATION_TEMPLATE": MIGRATION_TEMPLATE,
+    "FIRST_OF_YEAR_TEMPLATE": FIRST_OF_YEAR_TEMPLATE,
+}
+
+
+def _strings(value: Any) -> Any:
+    """Yield every string in a nested config structure."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield from _strings(key)
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
 
 
 class DashboardTests(unittest.TestCase):
@@ -108,7 +179,7 @@ class DashboardTests(unittest.TestCase):
 
     def test_empty_and_offline(self):
         for name, template in templates.items():
-            if name in ("OVERVIEW_TEMPLATE", "MIGRATION_TEMPLATE"):
+            if name == "MIGRATION_TEMPLATE":
                 continue
             self.assertNotIn("| :--", self.render(template, []))
             self.assertIn("Waiting for BirdNET-Go", self.render(template, [], False))
@@ -186,26 +257,24 @@ class DashboardTests(unittest.TestCase):
             "No first-of-year sightings today", self.render(template, [not_new])
         )
 
-    def test_default_dashboard_uses_name_and_count_states(self):
-        config = namespace["_default_config"](
-            "sensor.daily",
-            "sensor.summary",
-            "sensor.interest",
-            "http://birdnet.local",
-            "sensor.latest",
-            "sensor.detections",
-            "sensor.lifetime",
-            "camera.latest_image",
-            "sensor.foy",
-            "sensor.history",
-            "sensor.migration",
-        )
-        view = config["views"][0]
+    def test_default_layout_structure(self):
+        view = DEFAULT_CONFIG["views"][0]
         self.assertEqual(view["max_columns"], 3)
         sections = view["sections"]
         self.assertEqual(
             [section["column_span"] for section in sections],
             [3, 3, 1, 1, 1, 3],
+        )
+        self.assertEqual(
+            [section["title"] for section in sections],
+            [
+                "At a glance",
+                "Trends",
+                "Today's visitors",
+                "Latest detections",
+                "New species",
+                "Birds of interest",
+            ],
         )
         hero = sections[0]["cards"][0]
         self.assertEqual(hero["type"], "picture-entity")
@@ -215,10 +284,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(
             sum(card["type"] == "picture-entity" for card in sections[0]["cards"]), 1
         )
-        titles = [section["title"] for section in sections]
-        self.assertIn("Trends", titles)
-        self.assertNotIn("First of year", titles)
-        trend = sections[titles.index("Trends")]["cards"]
+        trend = sections[1]["cards"]
         self.assertEqual(
             [card["entity"] for card in trend if card["type"] != "conditional"],
             [
@@ -251,9 +317,6 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(foy_card["conditions"][0]["entity"], "sensor.foy")
         self.assertIn("None today", foy_card["conditions"][0]["state_not"])
         self.assertEqual(foy_card["card"]["entity"], "sensor.daily")
-        self.assertIn("__HISTORY__", templates["HISTORY_TEMPLATE"])
-        self.assertIn("__MIGRATION__", templates["MIGRATION_TEMPLATE"])
-        self.assertIn("__DAILY__", templates["FIRST_OF_YEAR_TEMPLATE"])
         tiles = [card for card in sections[0]["cards"] if card["type"] == "tile"]
         self.assertEqual(
             [card["entity"] for card in tiles],
@@ -289,6 +352,117 @@ class DashboardTests(unittest.TestCase):
                 self.assertEqual(card["grid_options"]["columns"], 12)
         interest_card = sections[5]["cards"][0]
         self.assertEqual(interest_card["grid_options"]["columns"], 6)
+
+    def test_button_card_layout_structure(self):
+        view = BUTTON_CONFIG["views"][0]
+        self.assertEqual(view["path"], "birds")
+        self.assertEqual(
+            [badge["entity"] for badge in view["badges"]],
+            ["sensor.lifetime", "sensor.interest", "sensor.summary"],
+        )
+        sections = view["sections"]
+        self.assertEqual(len(sections), 2)
+        self.assertTrue(all(section["column_span"] == 3 for section in sections))
+        cards = sections[0]["cards"]
+        self.assertEqual(
+            [card["type"] for card in cards],
+            [
+                "picture-entity",
+                "entity",
+                "entity",
+                "entity",
+                "entity",
+                "button",
+                "history-graph",
+            ],
+        )
+        hero = cards[0]
+        self.assertEqual(hero["entity"], "sensor.latest")
+        self.assertEqual(hero["camera_image"], "camera.latest_image")
+        self.assertEqual(hero["grid_options"], {"columns": 9, "rows": 4})
+        self.assertEqual(cards[1]["entity"], "sensor.first_bird")
+        button = cards[5]
+        self.assertEqual(
+            button["tap_action"],
+            {"action": "url", "url_path": "http://birdnet.local"},
+        )
+        history = cards[6]
+        self.assertEqual(
+            history["entities"], [{"entity": "sensor.latest", "name": "Detections"}]
+        )
+        table = sections[1]["cards"][0]
+        self.assertEqual(table["type"], "custom:button-card")
+        self.assertEqual(table["entity"], "sensor.daily")
+        self.assertEqual(table["triggers_update"], ["sensor.daily"])
+        content = table["custom_fields"]["content"]
+        self.assertIn("[[[", content)
+        self.assertIn("]]]", content)
+        self.assertIn("species_list", content)
+        self.assertIn("hourly_counts", content)
+        self.assertIn("/api/v2/media/image/", content)
+        self.assertIn("ebird.org", content)
+
+    def test_rendered_layouts_have_no_leftover_placeholders(self):
+        for name, config in (
+            ("default", DEFAULT_CONFIG),
+            ("button-card", BUTTON_CONFIG),
+        ):
+            with self.subTest(layout=name):
+                self.assertEqual(config["version"], 1)
+                self.assertEqual(len(config["views"]), 1)
+                for text in _strings(config):
+                    self.assertNotIn("__", text)
+
+    def test_button_card_detection(self):
+        has_button_card = namespace["_has_button_card"]
+
+        class FakeResources:
+            def __init__(self, items, fail=False):
+                self._items = items
+                self._fail = fail
+
+            async def async_load(self):
+                if self._fail:
+                    raise RuntimeError("boom")
+
+            def async_items(self):
+                return self._items
+
+        def hass_with(resources):
+            return SimpleNamespace(
+                data={"lovelace": SimpleNamespace(resources=resources)},
+                config=SimpleNamespace(
+                    path=lambda *parts: "/nonexistent/www/button-card.js"
+                ),
+            )
+
+        self.assertTrue(
+            asyncio.run(
+                has_button_card(
+                    hass_with(
+                        FakeResources(
+                            [{"url": "https://example.com/button-card.js?v=1"}]
+                        )
+                    )
+                )
+            )
+        )
+        self.assertFalse(
+            asyncio.run(
+                has_button_card(
+                    hass_with(FakeResources([{"url": "…/mini-graph-card.js"}]))
+                )
+            )
+        )
+        self.assertFalse(asyncio.run(has_button_card(hass_with(FakeResources([])))))
+        self.assertFalse(
+            asyncio.run(has_button_card(hass_with(FakeResources([], fail=True))))
+        )
+        self.assertFalse(
+            asyncio.run(
+                has_button_card(SimpleNamespace(data={}, config=hass_with(None).config))
+            )
+        )
 
 
 if __name__ == "__main__":
