@@ -8,7 +8,7 @@ This is a read-only **stats device**: it polls BirdNET-Go's analytics API and ne
 
 ## Screenshots
 
-![The Birds dashboard](.github/images/dashboard.png) 
+![The Birds dashboard](.github/images/hero.png) 
 
 | Configure the integration | Optional detection alerts |
 | --- | --- |
